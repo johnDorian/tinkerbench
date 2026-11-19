@@ -1,0 +1,45 @@
+# Demo setup: all three workbenches on localhost, data in ./data/<app>.
+#   docker compose up -d --build
+#   OpenSCAD  http://localhost:8020   (MCP: http://localhost:8020/mcp)
+#   Fritzing  http://localhost:8030   (MCP: http://localhost:8030/mcp)
+#   Slicer    http://localhost:8050   (MCP: http://localhost:8050/mcp)
+# No auth on any of them: keep them on a trusted network.
+# Printing needs a Moonraker printer: set PRINTER_URL (see .env.example).
+
+services:
+  openscad:
+    build: ./openscad_viewer
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: http://localhost:8020
+      SLICER_URL: http://localhost:8050
+      BED_SIZE: ${BED_SIZE:-220x220}
+      RENDER_CONCURRENCY: 2
+    volumes:
+      - ./data/openscad:/data
+    ports:
+      - "8020:8020"
+
+  fritzing:
+    build: ./fritzing
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: http://localhost:8030
+    volumes:
+      - ./data/fritzing:/data
+    ports:
+      - "8030:8030"
+
+  orcaslicer:
+    build: ./orcaslicer
+    restart: unless-stopped
+    environment:
+      PUBLIC_URL: http://localhost:8050
+      OPENSCAD_URL: http://openscad:8020          # container to container
+      OPENSCAD_PUBLIC_URL: http://localhost:8020  # links for the browser
+      PRINTER_URL: ${PRINTER_URL:-}               # empty: slicing works, printing is disabled
+      SLICE_TIMEOUT: 15m
+    volumes:
+      - ./data/orcaslicer:/data
+    ports:
+      - "8050:8050"

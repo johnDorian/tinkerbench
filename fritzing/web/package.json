@@ -1,0 +1,14 @@
+{
+  "name": "fritzing-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "rm -rf dist/assets dist/index.html && vite build"
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "5.0.3",
+    "svelte": "5.57.3",
+    "vite": "6.4.5"
+  }
+}

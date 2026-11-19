@@ -1,0 +1,30 @@
+version: '3'
+
+includes:
+  openscad:
+    taskfile: ./openscad_viewer/Taskfile.yaml
+    dir: ./openscad_viewer/
+  fritzing:
+    taskfile: ./fritzing/Taskfile.yaml
+    dir: ./fritzing/
+  orcaslicer:
+    taskfile: ./orcaslicer/Taskfile.yaml
+    dir: ./orcaslicer/
+
+tasks:
+  test:
+    desc: run the Go tests of all three apps
+    cmds:
+      - task: openscad:test
+      - task: fritzing:test
+      - task: orcaslicer:test
+
+  demo:up:
+    desc: build and start the demo setup (docker-compose.yaml) on localhost:8020/8030/8050
+    cmds:
+      - docker compose up -d --build
+
+  demo:down:
+    desc: stop the demo setup
+    cmds:
+      - docker compose down

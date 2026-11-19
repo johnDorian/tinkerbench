@@ -1,0 +1,39 @@
+version: "3"
+
+tasks:
+  test:
+    desc: unit tests; the parts and sketch tests need FRITZING_TEST_DATA (a folder with parts.db and parts/, see README)
+    cmds:
+      - go test ./...
+
+  web:install:
+    dir: web
+    sources: [package.json, package-lock.json]
+    generates: [node_modules/.package-lock.json]
+    cmds:
+      - npm ci
+
+  web:build:
+    desc: build the Svelte UI into web/dist (embedded by go build)
+    dir: web
+    deps: [web:install]
+    cmds:
+      - npm run build
+
+  web:dev:
+    desc: Vite dev server on http://localhost:5173 with hot reload; needs `task fritzing:docker:run` or a local run alongside
+    dir: web
+    deps: [web:install]
+    cmds:
+      - npm run dev
+
+  docker:build:
+    cmds:
+      - docker build -t fritzing-viewer .
+
+  docker:run:
+    desc: run the image locally on http://localhost:8030 with data in ./data (Fritzing is inside)
+    deps: [docker:build]
+    cmds:
+      - mkdir -p data
+      - docker run --rm -p 8030:8030 -e PUBLIC_URL=http://localhost:8030 -v "{{.PWD}}/data:/data" fritzing-viewer

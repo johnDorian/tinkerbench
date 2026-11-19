@@ -1,0 +1,42 @@
+version: "3"
+
+tasks:
+  test:
+    cmds:
+      - go test ./...
+
+  web:install:
+    desc: install the UI's npm packages (skipped when package-lock.json hasn't changed)
+    dir: web
+    sources: [package.json, package-lock.json]
+    generates: [node_modules/.package-lock.json]
+    cmds:
+      - npm ci
+
+  web:build:
+    desc: build the Svelte UI into web/dist (embedded by go build)
+    dir: web
+    deps: [web:install]
+    cmds:
+      - npm run build
+
+  web:dev:
+    desc: Vite dev server on http://localhost:5173 with hot reload; needs `task orcaslicer:run` alongside
+    dir: web
+    deps: [web:install]
+    cmds:
+      - npm run dev
+
+  run:
+    desc: run locally against ./data on http://localhost:8050 (needs OrcaSlicer 2.4.2 extracted, see README)
+    deps: [web:build]
+    cmds:
+      - ORCA="${ORCA:-$HOME/orcaslicer/squashfs-root/AppRun}" go run .
+    env:
+      DATA_DIR: ./data
+      PUBLIC_URL: http://localhost:8050
+      PRINTER_URL: ""
+
+  docker:build:
+    cmds:
+      - docker build -t orcaslicer .
