@@ -1,5 +1,7 @@
 # tinkerbench
 
+> **A completely vibe-coded project.** Everything here was written by an AI agent, with the aim of making prototyping quick and easy rather than producing polished software. Expect rough edges.
+
 Workbenches for hobby electronics and 3D printing that an AI agent drives over MCP while you watch in the browser. Each one is a small Go server with the real tool (OpenSCAD, Fritzing, OrcaSlicer) in its Docker image and a Svelte UI embedded in the binary.
 
 | App | What it does | Port |
@@ -25,6 +27,8 @@ claude mcp add --transport http fritzing   http://localhost:8030/mcp
 claude mcp add --transport http orcaslicer http://localhost:8050/mcp
 ```
 
+[skills/](skills/) has agent skills for using the workbenches well (`task skills:install`).
+
 Data lives in `./data/<app>`. The images are amd64 only.
 
 ## Connecting the apps
@@ -43,7 +47,4 @@ Needs Go, Node and [Task](https://taskfile.dev). `task --list` shows everything;
 - `task openscad:run`, `task orcaslicer:run`: run locally against `./data`.
 - `task fritzing:docker:run`: Fritzing only runs in its image.
 - `task <app>:web:dev`: Vite dev server with hot reload.
-
-## Third-party tools
-
-The code in this repository is MIT licensed (see [LICENSE](LICENSE)). The Docker images download and bundle other programs, which keep their own licenses: OpenSCAD (GPL-2.0), OrcaSlicer (AGPL-3.0), Fritzing (GPL-3.0; its parts library is CC BY-SA 3.0) and BOSL2 (BSD-2-Clause). The apps run them as separate programs. If you distribute built images, you also distribute these programs and must follow their licenses.
+- `task hooks:install`: once per clone, enables a pre-commit hook that runs [gitleaks](https://github.com/gitleaks/gitleaks) on the staged changes (`go install github.com/zricethezav/gitleaks/v8@latest`). `task secrets:scan` checks the whole history.

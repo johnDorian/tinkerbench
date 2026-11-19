@@ -19,12 +19,43 @@ tasks:
       - task: fritzing:test
       - task: orcaslicer:test
 
+  skills:install:
+    desc: symlink the agent skills in skills/ into ~/.claude/skills (existing entries with the same name are left alone)
+    cmds:
+      - mkdir -p ~/.claude/skills
+      - for d in skills/*/; do n=$(basename "$d"); [ -e ~/.claude/skills/$n ] || ln -s "$PWD/$d" ~/.claude/skills/$n; done
+
+  hooks:install:
+    desc: enable the repo's git hooks (.githooks/, gitleaks secret scan before every commit)
+    cmds:
+      - git config core.hooksPath .githooks
+
+  secrets:scan:
+    desc: scan the whole git history for secrets with gitleaks
+    cmds:
+      - gitleaks git --redact -v .
+
   demo:up:
-    desc: build and start the demo setup (docker-compose.yaml) on localhost:8020/8030/8050
+    desc: build and start the demo setup (docker-compose.yaml) on localhost:8020/8030/8050 and set up Claude Code in this folder for it (.mcp.json, skills linked into .claude/skills)
     cmds:
       - docker compose up -d --build
+      - mkdir -p .claude/skills
+      - for d in skills/*/; do ln -sfn "$PWD/$d" .claude/skills/$(basename "$d"); done
+      - |
+        cat > .mcp.json <<'EOF'
+        {
+          "mcpServers": {
+            "demo-openscad":   { "type": "http", "url": "http://localhost:8020/mcp" },
+            "demo-fritzing":   { "type": "http", "url": "http://localhost:8030/mcp" },
+            "demo-orcaslicer": { "type": "http", "url": "http://localhost:8050/mcp" }
+          }
+        }
+        EOF
+      - echo "wrote .mcp.json and linked skills - restart Claude Code in this folder and approve the demo-* servers"
 
   demo:down:
-    desc: stop the demo setup
+    desc: stop the demo setup and remove what demo:up set up for Claude Code (.mcp.json, skill links)
     cmds:
       - docker compose down
+      - rm -f .mcp.json
+      - for l in .claude/skills/*; do [ -L "$l" ] && rm "$l"; done; rmdir .claude/skills 2>/dev/null || true

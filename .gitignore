@@ -3,3 +3,5 @@ node_modules/
 .env
 .task/
 graphify-out/
+.mcp.json
+.claude/skills/

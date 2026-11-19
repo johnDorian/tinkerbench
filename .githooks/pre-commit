@@ -1,0 +1,16 @@
+#!/bin/sh
+# Blocks commits that add secrets. Enable with `task hooks:install`.
+# Bypass once (e.g. a reviewed false positive) with `git commit --no-verify`,
+# or mark the line with a `gitleaks:allow` comment.
+
+GITLEAKS=$(command -v gitleaks || true)
+if [ -z "$GITLEAKS" ] && [ -x "$(go env GOPATH 2>/dev/null)/bin/gitleaks" ]; then
+	GITLEAKS="$(go env GOPATH)/bin/gitleaks"
+fi
+if [ -z "$GITLEAKS" ]; then
+	echo "pre-commit: gitleaks not found; install it with" >&2
+	echo "  go install github.com/zricethezav/gitleaks/v8@latest" >&2
+	exit 1
+fi
+
+exec "$GITLEAKS" git --pre-commit --staged --redact --no-banner .
