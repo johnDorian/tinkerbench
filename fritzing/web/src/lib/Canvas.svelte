@@ -26,7 +26,7 @@
 </div>
 
 <style>
-  .box { position: relative; flex: 1; overflow: hidden; background: #fff; cursor: grab; touch-action: none; border: 1px solid var(--line); border-radius: 8px; }
+  .box { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #fff; cursor: grab; touch-action: none; }
   .box:active { cursor: grabbing; }
   img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; transform-origin: 0 0; user-select: none; }
 </style>

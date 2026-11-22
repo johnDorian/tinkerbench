@@ -35,6 +35,23 @@ tasks:
     cmds:
       - gitleaks git --redact -v .
 
+  docker:build:
+    desc: build the images of all three workbenches (docker-compose.yaml)
+    cmds:
+      - docker compose build
+
+  docker:up:
+    desc: build and start all three workbenches on localhost (OpenSCAD :8020, Fritzing :8030, OrcaSlicer :8050, data in ./data)
+    cmds:
+      - docker compose up -d --build
+      - docker compose ps
+      - 'echo "OpenSCAD http://localhost:8020 · Fritzing http://localhost:8030 · OrcaSlicer http://localhost:8050"'
+
+  docker:down:
+    desc: stop the workbenches started with docker:up
+    cmds:
+      - docker compose down
+
   demo:up:
     desc: build and start the demo setup (docker-compose.yaml) on localhost:8020/8030/8050 and set up Claude Code in this folder for it (.mcp.json, skills linked into .claude/skills)
     cmds:

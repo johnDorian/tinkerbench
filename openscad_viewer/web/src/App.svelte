@@ -22,7 +22,7 @@
   let error = $state('')
   let connected = $state(false)
   let activity = $state([]) // recent events, newest first
-  let side = $state('activity') // activity | comments | history
+  let side = $state('activity') // activity | comments | images | history
   let focus = $state(null) // {file, line, n}: scroll the code pane there
   let showResolved = $state(false)
   let versions = $state([])
@@ -30,6 +30,8 @@
   let images = $state([]) // uploaded scans and photos of the real part
   let measuring = $state(null) // the image open in the measuring dialog
   let follow = $state(loadPref('follow', true))
+  let showCode = $state(loadPref('showCode', true)) // the code pane beside the model
+  let codeDot = $state(false) // a file changed while the code pane was hidden
 
   function loadPref(k, def) {
     try {
@@ -42,6 +44,19 @@
   $effect(() => {
     try { localStorage.setItem('openscad.follow', JSON.stringify(follow)) } catch {}
   })
+  $effect(() => {
+    try { localStorage.setItem('openscad.showCode', JSON.stringify(showCode)) } catch {}
+  })
+
+  // Show the code pane (to reveal a line or a version in it); clears the changed-file dot.
+  function openCode() {
+    showCode = true
+    codeDot = false
+  }
+  function toggleCode() {
+    if (showCode) showCode = false
+    else openCode()
+  }
 
   const marks = $derived(errorLines([...(project?.last_render?.errors ?? []), ...(project?.last_render?.warnings ?? [])]))
   const openComments = $derived((project?.comments ?? []).filter((c) => !c.resolved))
@@ -61,6 +76,7 @@
     preview = null
     selectedFile = c.file
     focus = { file: c.file, line: c.line, n: (focus?.n ?? 0) + 1 }
+    openCode()
   }
 
   const stlUrl = $derived(project && project.last_render?.stats ? `${api.stlUrl(project.name)}?v=${stlVersion}` : null)
@@ -143,6 +159,7 @@
         break
       case 'file_changed':
         if (e.source !== 'web' && follow) selectedFile = e.file
+        if (!showCode) codeDot = true
         flash(e.file)
         loadProject()
         break
@@ -181,9 +198,19 @@
     es.onmessage = (m) => onEvent(JSON.parse(m.data))
     const onHash = () => select(decodeURIComponent(location.hash.slice(2)))
     addEventListener('hashchange', onHash)
+    // "\" shows or hides the code pane, unless the user is typing somewhere
+    const onKey = (e) => {
+      if (e.key !== '\\' || e.ctrlKey || e.metaKey || e.altKey || !project) return
+      const t = e.target
+      if (t instanceof HTMLElement && (t.matches('input, textarea, select') || t.isContentEditable)) return
+      e.preventDefault()
+      toggleCode()
+    }
+    addEventListener('keydown', onKey)
     return () => {
       es.close()
       removeEventListener('hashchange', onHash)
+      removeEventListener('keydown', onKey)
     }
   })
 
@@ -218,6 +245,7 @@
     if (!res) return
     selectedFile = v.file
     preview = { n: v.n, content: res.content, label: `Version #${v.n} of ${v.file} · ${v.source || '?'} · ${ago(v.time)}${v.note ? ' · ' + v.note : ''}` }
+    openCode()
   }
 
   async function restore() {
@@ -246,152 +274,159 @@
   }
 </script>
 
-<header>
-  <div class="brand">OpenSCAD Workbench</div>
-  <select value={current} onchange={(e) => select(e.currentTarget.value)}>
-    {#if !current}<option value="">Choose a project…</option>{/if}
-    {#each projects as p (p.name)}<option value={p.name}>{p.name}</option>{/each}
-  </select>
-  <button onclick={newProject}>New</button>
-  {#if project}
-    <a class="button" href="{api.stlUrl(project.name)}?download" download>Download STL</a>
-    {#if project.last_render?.stats && config.slicer_url}
-      <a class="button" href={`${config.slicer_url}/?import=${encodeURIComponent(project.name)}`} target="_blank" rel="noopener" title="Open this model in the slicer (new tab)">Slice</a>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" style="fill: var(--accent)"/>
+        <path d="M8 12l8-4 8 4v9l-8 4-8-4z M8 12l8 4 8-4 M16 16v9" fill="none" style="stroke: var(--on-accent)" stroke-width="2" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand-name">OpenSCAD <span class="brand-sub">Workbench</span></span>
+    </div>
+    <div class="group">
+      <select value={current} onchange={(e) => select(e.currentTarget.value)}>
+        {#if !current}<option value="">Choose a project…</option>{/if}
+        {#each projects as p (p.name)}<option value={p.name}>{p.name}</option>{/each}
+      </select>
+      <button onclick={newProject}>New</button>
+    </div>
+    {#if project}
+      <span class="sep"></span>
+      <div class="group">
+        <a class="button" href="{api.stlUrl(project.name)}?download" download>Download STL</a>
+        {#if project.last_render?.stats && config.slicer_url}
+          <a class="button" href={`${config.slicer_url}/?import=${encodeURIComponent(project.name)}`} target="_blank" rel="noopener" title="Open this model in the slicer (new tab)">Slice</a>
+        {/if}
+        <button class="danger" onclick={deleteProject}>Delete</button>
+      </div>
     {/if}
-    <button class="danger" onclick={deleteProject}>Delete</button>
+    <span class="spacer"></span>
+    <div class="status">
+      <label title="Jump to whatever the agent is working on">
+        <input type="checkbox" bind:checked={follow}> Follow agent
+      </label>
+    </div>
+    <span class="live" class:on={connected} title={connected ? 'Live' : 'Reconnecting…'}>{connected ? 'Live' : 'Offline'}</span>
+  </header>
+
+  {#if error}
+    <div class="banner err">{error}<button class="close" aria-label="Dismiss" onclick={() => (error = '')}>×</button></div>
   {/if}
-  <span class="spacer"></span>
-  <label class="follow" title="Jump to whatever the agent is working on">
-    <input type="checkbox" bind:checked={follow}> Follow agent
-  </label>
-  <span class="conn" class:on={connected} title={connected ? 'Live' : 'Reconnecting…'}></span>
-</header>
 
-{#if error}
-  <div class="error-bar">{error} <button onclick={() => (error = '')}>×</button></div>
-{/if}
+  {#if project}
+    <main class="workspace" class:with-left={showCode}>
+      <!-- hidden, not unmounted: an unsaved edit in the editor survives hiding the code -->
+      <section class="panel code" hidden={!showCode}>
+          <CodePane
+            files={project.content}
+            bind:selected={selectedFile}
+            {marks}
+            changed={changedFiles}
+            {preview}
+            onsave={save}
+            onclosepreview={() => (preview = null)}
+            onrestore={restore}
+            comments={project.comments}
+            on={commentActions}
+            onshow={(c) => viewer?.showComment(c)}
+            {focus}
+          />
+      </section>
 
-{#if project}
-  {#if project.description}<div class="description">{project.description}</div>{/if}
-  <main>
-    <section class="code card">
-      <CodePane
-        files={project.content}
-        bind:selected={selectedFile}
-        {marks}
-        changed={changedFiles}
-        {preview}
-        onsave={save}
-        onclosepreview={() => (preview = null)}
-        onrestore={restore}
-        comments={project.comments}
-        on={commentActions}
-        onshow={(c) => viewer?.showComment(c)}
-        {focus}
-      />
-    </section>
-    <section class="model card">
-      <div class="viewer-wrap">
-        <Viewer
-          bind:this={viewer}
-          url={stlUrl}
-          fitKey={project.name}
-          bed={config.bed}
-          stlTime={project.last_render?.stl_time ?? null}
-          renderVersion={stlVersion}
-          {partsVersion}
-          comments={project.comments ?? []}
-          on={commentActions}
-          onjump={goTo}
-        />
-      </div>
-      <div class="render">
-        <RenderPanel result={project.last_render} params={project.params} {rendering} bed={config.bed} onrender={rerender} />
-      </div>
-    </section>
-    <aside class="card">
-      <div class="side-tabs">
-        <button class:active={side === 'activity'} onclick={() => showSide('activity')}>Activity</button>
-        <button class:active={side === 'comments'} onclick={() => showSide('comments')}>
-          Comments{#if openComments.length}<span class="badge">{openComments.length}</span>{/if}
-        </button>
-        <button class:active={side === 'images'} onclick={() => showSide('images')}>
-          Images{#if images.length}<span class="badge count">{images.length}</span>{/if}
-        </button>
-        <button class:active={side === 'history'} onclick={() => showSide('history')}>History</button>
-      </div>
-      {#if side === 'history'}
-        <History {versions} active={preview?.n} onpick={pickVersion} />
-      {:else if side === 'images'}
-        <Images project={current} {images} onchanged={loadImages} onmeasure={(img) => (measuring = img)} />
-      {:else if side === 'comments'}
-        <div class="comments">
-          <label class="muted"><input type="checkbox" bind:checked={showResolved}> Show resolved</label>
-          {#each listedComments as c (c.id)}
-            {#if c.file}
-              <button class="jump" onclick={() => goTo(c)}>{c.file}:{c.line}</button>
-            {:else}
-              <button class="jump" onclick={() => viewer?.showComment(c)}>On the model · {c.anchor?.part || 'whole model'}</button>
-            {/if}
-            <CommentThread comment={c} on={commentActions} onshow={(x) => viewer?.showComment(x)} compact />
+      <section class="panel stage">
+        <div class="panel-bar">
+          <button class="ghost code-toggle" aria-pressed={showCode} title="Show/hide code (\)" onclick={toggleCode}>
+            <span class="code-glyph" aria-hidden="true">&lt;/&gt;</span> Code
+            {#if codeDot && !showCode}<span class="dot-new" title="A file changed"></span>{/if}
+          </button>
+          {#if project.description}
+            <span class="desc muted" title={project.description}>{project.description}</span>
           {:else}
-            <p class="muted">Click a line number in the code to comment on it. Then ask the agent to "address my comments".</p>
-          {/each}
+            <span class="spacer"></span>
+          {/if}
         </div>
-      {:else}
-        <ol class="activity">
-          {#each activity.filter((e) => e.project === current) as e}
-            <li><span>{describe(e)}</span><time>{ago(e.time)}</time></li>
+        <div class="viewer-wrap">
+          <Viewer
+            bind:this={viewer}
+            url={stlUrl}
+            fitKey={project.name}
+            bed={config.bed}
+            stlTime={project.last_render?.stl_time ?? null}
+            renderVersion={stlVersion}
+            {partsVersion}
+            comments={project.comments ?? []}
+            on={commentActions}
+            onjump={goTo}
+          />
+        </div>
+        <div class="render">
+          <RenderPanel result={project.last_render} params={project.params} {rendering} bed={config.bed} onrender={rerender} />
+        </div>
+      </section>
+
+      <aside class="panel side">
+        <div class="tabs">
+          <button class:active={side === 'activity'} onclick={() => showSide('activity')}>Activity</button>
+          <button class:active={side === 'comments'} onclick={() => showSide('comments')}>
+            Comments{#if openComments.length}<span class="badge">{openComments.length}</span>{/if}
+          </button>
+          <button class:active={side === 'images'} onclick={() => showSide('images')}>
+            Images{#if images.length}<span class="badge count">{images.length}</span>{/if}
+          </button>
+          <button class:active={side === 'history'} onclick={() => showSide('history')}>History</button>
+        </div>
+        <div class="panel-body">
+          {#if side === 'history'}
+            <History {versions} active={preview?.n} onpick={pickVersion} />
+          {:else if side === 'images'}
+            <Images project={current} {images} onchanged={loadImages} onmeasure={(img) => (measuring = img)} />
+          {:else if side === 'comments'}
+            <div class="comments">
+              <label class="muted"><input type="checkbox" bind:checked={showResolved}> Show resolved</label>
+              {#each listedComments as c (c.id)}
+                {#if c.file}
+                  <button class="jump" onclick={() => goTo(c)}>{c.file}:{c.line}</button>
+                {:else}
+                  <button class="jump" onclick={() => viewer?.showComment(c)}>On the model · {c.anchor?.part || 'whole model'}</button>
+                {/if}
+                <CommentThread comment={c} on={commentActions} onshow={(x) => viewer?.showComment(x)} compact />
+              {:else}
+                <p class="muted">Click a line number in the code to comment on it. Then ask the agent to "address my comments".</p>
+              {/each}
+            </div>
           {:else}
-            <li class="muted">Changes from the agent show up here as they happen.</li>
-          {/each}
-        </ol>
-      {/if}
-    </aside>
-  </main>
-  <Measure project={current} image={measuring} onclose={() => (measuring = null)} />
-{:else}
-  <div class="intro">
-    <h1>No project selected</h1>
-    <p>Ask your agent to create one. Connect it to the MCP server at <code>{config.mcp_url || '/mcp'}</code>; with "Follow agent" on, this page switches to whatever it works on.</p>
-    <p class="muted">{config.openscad_version}</p>
-  </div>
-{/if}
+            <ol class="activity">
+              {#each activity.filter((e) => e.project === current) as e}
+                <li><span>{describe(e)}</span><time>{ago(e.time)}</time></li>
+              {:else}
+                <li class="muted">Changes from the agent show up here as they happen.</li>
+              {/each}
+            </ol>
+          {/if}
+        </div>
+      </aside>
+    </main>
+    <Measure project={current} image={measuring} onclose={() => (measuring = null)} />
+  {:else}
+    <div class="intro">
+      <h1>No project selected</h1>
+      <p>Ask your agent to create one. Connect it to the MCP server at <code>{config.mcp_url || '/mcp'}</code>; with "Follow agent" on, this page switches to whatever it works on.</p>
+      <p class="muted">{config.openscad_version}</p>
+    </div>
+  {/if}
+</div>
 
 <style>
-  header {
-    display: flex; gap: 8px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line);
-    background: var(--card); flex-wrap: wrap;
+  .code[hidden] { display: none; }
+  .code-toggle { position: relative; }
+  .code-glyph { font: 12px var(--mono); color: var(--faint); }
+  .dot-new {
+    position: absolute; top: 3px; right: 3px; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 0 2px var(--card);
   }
-  .brand { font-weight: 700; margin-right: 8px; }
-  .spacer { flex: 1; }
-  .follow { display: flex; gap: 6px; align-items: center; font-size: 13px; color: var(--muted); }
-  .conn { width: 9px; height: 9px; border-radius: 50%; background: var(--err); }
-  .conn.on { background: var(--ok); }
-  .error-bar {
-    background: var(--err-soft); color: var(--err); padding: 6px 16px; font-size: 13px; display: flex; justify-content: space-between;
-  }
-  .error-bar button { background: none; border: 0; color: inherit; cursor: pointer; font-size: 16px; }
-  .description { padding: 8px 16px 0; color: var(--muted); font-size: 14px; }
-  main {
-    display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr) 290px; gap: 12px; padding: 12px 16px;
-    height: calc(100dvh - 70px); box-sizing: border-box;
-  }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; min-height: 0; }
-  .model { display: flex; flex-direction: column; }
+  .desc { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
   .viewer-wrap { flex: 1; min-height: 240px; }
   .render { border-top: 1px solid var(--line); max-height: 40%; overflow: auto; flex-shrink: 0; }
-  aside { display: flex; flex-direction: column; }
-  .side-tabs { display: flex; border-bottom: 1px solid var(--line); }
-  .side-tabs button {
-    flex: 1; background: none; border: 0; border-radius: 0; padding: 8px 4px; color: var(--muted); cursor: pointer;
-    font-size: 12px; white-space: nowrap;
-  }
-  .side-tabs button.active { color: var(--text); box-shadow: inset 0 -2px var(--accent); }
-  .badge {
-    font-size: 11px; background: var(--accent); color: #fff; border-radius: 999px; padding: 0 6px; margin-left: 4px;
-  }
-  .badge.count { background: var(--line); color: var(--muted); }
   .comments { overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
   .comments label { display: flex; gap: 6px; align-items: center; margin-bottom: 4px; }
   .jump {
@@ -401,17 +436,8 @@
   .activity { list-style: none; margin: 0; padding: 8px 12px; overflow: auto; font-size: 13px; }
   .activity li { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--line); }
   .activity time { color: var(--faint); font-size: 12px; white-space: nowrap; }
-  .muted { color: var(--muted); }
-  .intro { max-width: 560px; margin: 15vh auto; padding: 0 16px; }
-  .intro h1 { font-size: 22px; }
 
-  @media (max-width: 1100px) {
-    main { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); height: auto; }
-    .code, .model { height: 70vh; }
-    aside { grid-column: 1 / -1; max-height: 300px; }
-  }
   @media (max-width: 720px) {
-    main { grid-template-columns: minmax(0, 1fr); }
-    .model { order: -1; }
+    .stage { order: -1; }
   }
 </style>

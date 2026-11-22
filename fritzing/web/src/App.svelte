@@ -5,6 +5,8 @@
   import Wiring from './lib/Wiring.svelte'
 
   const VIEWS = ['breadboard', 'schematic', 'pcb']
+  const TABS = ['parts', 'sketch', 'code', 'history', 'activity']
+  const cap = (t) => t[0].toUpperCase() + t.slice(1)
   let config = $state({ fritzing_version: '', mcp_url: '', parts: 0 })
   let projects = $state([])
   let current = $state(decodeURIComponent(location.hash.slice(2)) || '')
@@ -140,153 +142,182 @@
 </script>
 
 <div class="app">
-  <header>
-    <strong>Fritzing</strong>
-    <select value={current} onchange={(e) => select(e.target.value)}>
-      {#each projects as p}<option value={p.name}>{p.name}</option>{/each}
-    </select>
-    <button onclick={create}>New</button>
+  <header class="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="7" style="fill: var(--accent)"/>
+        <circle cx="9" cy="9" r="3" style="fill: var(--on-accent)"/>
+        <circle cx="23" cy="23" r="3" style="fill: var(--on-accent)"/>
+        <path d="M9 9h8v14h6" fill="none" stroke-width="2" style="stroke: var(--on-accent)"/>
+      </svg>
+      <span class="brand-name">Fritzing <span class="brand-sub">Workbench</span></span>
+    </div>
+    <div class="group">
+      <select value={current} onchange={(e) => select(e.target.value)} aria-label="Project">
+        {#if !current}<option value="" disabled>Choose a project…</option>{/if}
+        {#each projects as p}<option value={p.name}>{p.name}</option>{/each}
+      </select>
+      <button onclick={create}>New</button>
+    </div>
     {#if current}
-      <button onclick={render} disabled={rendering}>{rendering ? 'Rendering…' : 'Render'}</button>
-      <a class="button" href={api.downloadUrl(current)}>Download .fzz</a>
-      <button class="danger" onclick={remove}>Delete</button>
+      <span class="sep"></span>
+      <div class="group">
+        <button onclick={render} disabled={rendering}>{rendering ? 'Rendering…' : 'Render'}</button>
+        <a class="button" href={api.downloadUrl(current)}>Download .fzz</a>
+        <button class="danger" onclick={remove}>Delete</button>
+      </div>
     {/if}
-    <span class="grow"></span>
-    {#if error}<span class="err">{error}</span>{/if}
-    <span class="dot" class:on={connected} title={connected ? 'live' : 'disconnected'}></span>
-    <span class="faint">Fritzing {config.fritzing_version} · {config.parts} parts · MCP {config.mcp_url}</span>
+    <span class="spacer"></span>
+    <div class="status"><span>Fritzing {config.fritzing_version} · {config.parts} parts</span></div>
+    <span class="live" class:on={connected} title={connected ? 'Connected: changes show up as they happen' : 'Disconnected: reconnecting'}>{connected ? 'Live' : 'Offline'}</span>
   </header>
 
-  <main>
-    <section class="left">
-      <nav>
-        {#each [...VIEWS, 'wiring'] as v}<button class:on={view === v} onclick={() => (view = v)}>{v}</button>{/each}
-      </nav>
-      {#if lr && !lr.ok}
-        <div class="msg bad">{#each lr.errors as m}<div>{m}</div>{/each}{#if lr.log}<pre>{lr.log}</pre>{/if}</div>
+  {#if error}<div class="banner err" role="alert">{error}<button class="close" aria-label="Dismiss" onclick={() => (error = '')}>×</button></div>{/if}
+
+  <main class="workspace">
+    <section class="panel stage">
+      {#if current}
+        <div class="panel-bar">
+          <div class="seg">
+            {#each [...VIEWS, 'wiring'] as v}<button class:active={view === v} onclick={() => (view = v)}>{v}</button>{/each}
+          </div>
+          <span class="spacer"></span>
+        </div>
+        {#if (lr && !lr.ok) || lr?.warnings?.length}
+          <div class="msgs">
+            {#if lr && !lr.ok}
+              <div class="msg bad">{#each lr.errors as m}<div>{m}</div>{/each}{#if lr.log}<pre>{lr.log}</pre>{/if}</div>
+            {/if}
+            {#if lr?.warnings?.length}<div class="msg warn">{#each lr.warnings as m}<div>{m}</div>{/each}</div>{/if}
+          </div>
+        {/if}
       {/if}
-      {#if lr?.warnings?.length}<div class="msg warn">{#each lr.warnings as m}<div>{m}</div>{/each}</div>{/if}
-      {#if view === 'wiring'}
-        <div class="wiring">{#if current}<Wiring name={current} view={lastCanvas} refresh={project?.version ?? 0} />{:else}<div class="empty">Create or pick a project.</div>{/if}</div>
+
+      {#if !current}
+        <div class="intro">
+          <h1>No project selected</h1>
+          <p>Ask your agent to create one. Connect it to the MCP server at <code>{config.mcp_url || '/mcp'}</code>.</p>
+        </div>
+      {:else if view === 'wiring'}
+        <div class="wiring"><Wiring name={current} view={lastCanvas} refresh={project?.version ?? 0} /></div>
       {:else if project && hasView}
         <Canvas src={api.viewUrl(current, view, stamp)} reset={current + view} />
       {:else}
         <div class="empty">{project ? (rendering ? 'Rendering…' : `No ${view} render yet.`) : 'Create or pick a project.'}</div>
       {/if}
-      {#if lr && view !== 'wiring'}<div class="faint">rendered {ago(lr.time)} in {lr.duration_s?.toFixed(1)}s · scroll to zoom, drag to pan, double-click to reset</div>{/if}
+      {#if lr && view !== 'wiring'}<div class="panel-foot">rendered {ago(lr.time)} in {lr.duration_s?.toFixed(1)}s · scroll to zoom, drag to pan, double-click to reset</div>{/if}
     </section>
 
-    <aside>
-      <nav>
-        {#each ['parts', 'sketch', 'code', 'history', 'activity'] as t}<button class:on={side === t} onclick={() => (side = t)}>{t}</button>{/each}
-      </nav>
+    <aside class="panel side">
+      <div class="tabs">
+        {#each TABS as t}<button class:active={side === t} onclick={() => (side = t)}>{cap(t)}</button>{/each}
+      </div>
 
-      {#if side === 'parts'}
-        <form onsubmit={(e) => { e.preventDefault(); search() }}>
-          <input placeholder="search parts: led, arduino uno, 10k…" bind:value={query} />
-          <button class="primary" disabled={searching}>Search</button>
-        </form>
-        <label class="faint"><input type="checkbox" bind:checked={mineOnly} onchange={search} /> imported parts only</label>
-        <details>
-          <summary class="faint">Import a part (.fzpz)</summary>
-          <form onsubmit={(e) => { e.preventDefault(); importFromUrl() }}>
-            <input placeholder="https://…/part.fzpz (GitHub links work)" bind:value={importUrl} />
-            <button disabled={importing || !importUrl.trim()}>Import</button>
+      <div class="panel-body side-body">
+        {#if side === 'parts'}
+          <form onsubmit={(e) => { e.preventDefault(); search() }}>
+            <input placeholder="search parts: led, arduino uno, 10k…" bind:value={query} />
+            <button class="primary" disabled={searching}>Search</button>
           </form>
-          <input type="file" accept=".fzpz,.zip" disabled={importing} onchange={importFromFile} />
-          {#if imported}
-            <p>Imported <strong>{imported.title}</strong> ({imported.connectors} pins, {imported.views.join(', ')}){imported.replaced ? ', replaced the old one' : ''}.</p>
-            {#each imported.warnings as w}<p class="faint">⚠ {w}</p>{/each}
+          <label class="faint small"><input type="checkbox" bind:checked={mineOnly} onchange={search} /> imported parts only</label>
+          <details>
+            <summary class="faint small">Import a part (.fzpz)</summary>
+            <form onsubmit={(e) => { e.preventDefault(); importFromUrl() }}>
+              <input placeholder="https://…/part.fzpz (GitHub links work)" bind:value={importUrl} />
+              <button disabled={importing || !importUrl.trim()}>Import</button>
+            </form>
+            <input type="file" accept=".fzpz,.zip" disabled={importing} onchange={importFromFile} />
+            {#if imported}
+              <p>Imported <strong>{imported.title}</strong> ({imported.connectors} pins, {imported.views.join(', ')}){imported.replaced ? ', replaced the old one' : ''}.</p>
+              {#each imported.warnings as w}<p class="faint">⚠ {w}</p>{/each}
+            {/if}
+          </details>
+          <ul class="list">
+            {#each hits as h}
+              <li>
+                <img src={api.partImage(h.module_id, 'icon')} alt="" loading="lazy" onerror={(e) => (e.target.style.visibility = 'hidden')} />
+                <div class="grow">
+                  <button class="link" onclick={() => show(h)}>{h.title}</button>
+                  <div class="faint small">{h.family}{#if h.properties?.package} · {h.properties.package}{/if}{#if h.source === 'user'} · imported{/if}</div>
+                </div>
+                <button disabled={!current} onclick={() => add(h)}>Add</button>
+              </li>
+            {/each}
+          </ul>
+          {#if detail}
+            <div class="detail">
+              <div class="row"><strong>{detail.title}</strong>{#if detail.source === 'user'}<button onclick={() => deleteImported(detail)}>Delete</button>{/if}<button class="ghost" aria-label="Close" onclick={() => (detail = null)}>×</button></div>
+              <div class="faint small mono">{detail.module_id}</div>
+              <p>{detail.description}</p>
+              <div class="imgs">{#each detail.views as v}<img src={api.partImage(detail.module_id, v)} alt={v} title={v} />{/each}</div>
+              <table><tbody>
+                {#each detail.connectors as c}<tr><td><code>{c.id}</code></td><td>{c.name}</td><td class="faint">{c.description ?? ''}</td></tr>{/each}
+              </tbody></table>
+            </div>
           {/if}
-        </details>
-        <ul class="list">
-          {#each hits as h}
-            <li>
-              <img src={api.partImage(h.module_id, 'icon')} alt="" loading="lazy" onerror={(e) => (e.target.style.visibility = 'hidden')} />
-              <div class="grow">
-                <button class="link" onclick={() => show(h)}>{h.title}</button>
-                <div class="faint">{h.family}{#if h.properties?.package} · {h.properties.package}{/if}{#if h.source === 'user'} · imported{/if}</div>
-              </div>
-              <button disabled={!current} onclick={() => add(h)}>Add</button>
-            </li>
-          {/each}
-        </ul>
-        {#if detail}
-          <div class="card">
-            <div class="row"><strong>{detail.title}</strong>{#if detail.source === 'user'}<button onclick={() => deleteImported(detail)}>Delete</button>{/if}<button onclick={() => (detail = null)}>×</button></div>
-            <div class="faint">{detail.module_id}</div>
-            <p>{detail.description}</p>
-            <div class="imgs">{#each detail.views as v}<img src={api.partImage(detail.module_id, v)} alt={v} title={v} />{/each}</div>
-            <table><tbody>
-              {#each detail.connectors as c}<tr><td><code>{c.id}</code></td><td>{c.name}</td><td class="faint">{c.description ?? ''}</td></tr>{/each}
-            </tbody></table>
-          </div>
-        {/if}
-      {:else if side === 'sketch'}
-        {#if project?.sketch}
-          <h4>Parts</h4>
+        {:else if side === 'sketch'}
+          {#if project?.sketch}
+            <h4 class="section-title">Parts</h4>
+            <ul class="list">
+              {#each project.sketch.parts as p}
+                <li><div class="grow"><strong>{p.title}</strong> <span class="faint small mono">{p.module_id}</span>
+                  {#if p.properties}<div class="faint small">{Object.entries(p.properties).map(([k, v]) => `${k}=${v}`).join(', ')}</div>{/if}</div>
+                  <button class="danger" onclick={() => removePart(p.title)}>×</button></li>
+              {:else}<li class="faint">Empty sketch.</li>{/each}
+            </ul>
+            <h4 class="section-title">Nets</h4>
+            <ul class="list">
+              {#each project.sketch.nets as n}<li><span class="faint small">{n.view}</span> <code>{n.pins.join(' – ')}</code></li>{:else}<li class="faint">No connections.</li>{/each}
+            </ul>
+          {:else if project?.sketch_error}<div class="msg bad">{project.sketch_error}</div>{/if}
+        {:else if side === 'code'}
+          {#if project}
+            <textarea spellcheck="false" value={draft ?? sketchFile} oninput={(e) => (draft = e.target.value)}></textarea>
+            <div class="row"><span class="btns"><button class="primary" disabled={draft === null} onclick={save}>Save</button>
+              <button disabled={draft === null} onclick={() => (draft = null)}>Revert</button></span>
+              <span class="faint small">sketch.fz · XML is validated before saving</span></div>
+          {/if}
+        {:else if side === 'history'}
           <ul class="list">
-            {#each project.sketch.parts as p}
-              <li><div class="grow"><strong>{p.title}</strong> <span class="faint">{p.module_id}</span>
-                {#if p.properties}<div class="faint">{Object.entries(p.properties).map(([k, v]) => `${k}=${v}`).join(', ')}</div>{/if}</div>
-                <button class="danger" onclick={() => removePart(p.title)}>×</button></li>
-            {:else}<li class="faint">Empty sketch.</li>{/each}
+            {#each [...versions].reverse() as v}
+              <li><div class="grow">#{v.n} <strong>{v.file}</strong> <span class="faint small">{who(v.source)} · {ago(v.time)}{v.note ? ' · ' + v.note : ''}</span></div>
+                {#if !v.deleted}<button onclick={() => restore(v.n)}>Restore</button>{/if}</li>
+            {/each}
           </ul>
-          <h4>Nets</h4>
+        {:else}
           <ul class="list">
-            {#each project.sketch.nets as n}<li><span class="faint">{n.view}</span> <code>{n.pins.join(' – ')}</code></li>{:else}<li class="faint">No connections.</li>{/each}
+            {#each activity as e}<li><span class="faint small">{ago(e.time)}</span> {who(e.source)}: {e.kind.replace('_', ' ')} {e.file ?? ''}{e.ok === false ? ' (failed)' : ''}</li>{:else}<li class="faint">Nothing yet.</li>{/each}
           </ul>
-        {:else if project?.sketch_error}<div class="msg bad">{project.sketch_error}</div>{/if}
-      {:else if side === 'code'}
-        {#if project}
-          <textarea spellcheck="false" value={draft ?? sketchFile} oninput={(e) => (draft = e.target.value)}></textarea>
-          <div class="row"><button class="primary" disabled={draft === null} onclick={save}>Save</button>
-            <button disabled={draft === null} onclick={() => (draft = null)}>Revert</button>
-            <span class="faint">sketch.fz · XML is validated before saving</span></div>
         {/if}
-      {:else if side === 'history'}
-        <ul class="list">
-          {#each [...versions].reverse() as v}
-            <li><div class="grow">#{v.n} <strong>{v.file}</strong> <span class="faint">{who(v.source)} · {ago(v.time)}{v.note ? ' · ' + v.note : ''}</span></div>
-              {#if !v.deleted}<button onclick={() => restore(v.n)}>Restore</button>{/if}</li>
-          {/each}
-        </ul>
-      {:else}
-        <ul class="list">
-          {#each activity as e}<li><span class="faint">{ago(e.time)}</span> {who(e.source)}: {e.kind.replace('_', ' ')} {e.file ?? ''}{e.ok === false ? ' (failed)' : ''}</li>{:else}<li class="faint">Nothing yet.</li>{/each}
-        </ul>
-      {/if}
+      </div>
     </aside>
   </main>
 </div>
 
 <style>
-  .app { display: flex; flex-direction: column; height: 100vh; }
-  header { display: flex; gap: 8px; align-items: center; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap; }
-  main { flex: 1; display: grid; grid-template-columns: 1fr 380px; gap: 12px; padding: 12px; min-height: 0; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; grid-auto-rows: minmax(300px, auto); overflow: auto; } }
-  .left, aside { display: flex; flex-direction: column; gap: 8px; min-height: 0; }
-  aside { overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-  nav { display: flex; gap: 4px; flex-wrap: wrap; }
-  .grow { flex: 1; min-width: 0; }
-  .faint { color: var(--faint); font-size: 12px; }
-  .err { color: var(--err); }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--err); }
-  .dot.on { background: var(--ok); }
-  .wiring { flex: 1; overflow: auto; background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
-  .wiring > :global(*) { max-width: 960px; width: 100%; }
-  .empty { flex: 1; display: grid; place-items: center; color: var(--faint); border: 1px dashed var(--line); border-radius: 8px; }
-  .msg { padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+  .msgs { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 0; flex-shrink: 0; }
+  .msg { padding: 6px 10px; border-radius: var(--radius-sm); font-size: 13px; }
   .msg.bad { background: var(--err-soft); color: var(--err); }
   .msg.warn { background: var(--warn-soft); color: var(--warn); }
   pre { white-space: pre-wrap; font: 11px var(--mono); margin: 4px 0 0; max-height: 160px; overflow: auto; }
+
+  .wiring { flex: 1; min-height: 0; overflow: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .wiring > :global(*) { max-width: 960px; width: 100%; }
+
+  .side-body { padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  .btns { display: inline-flex; gap: 6px; }
   form { display: flex; gap: 6px; } form input { flex: 1; }
+  details summary { cursor: pointer; }
+  details form { margin-top: 6px; }
+  details > input[type="file"] { margin-top: 6px; max-width: 100%; }
+  p { margin: 4px 0; }
+
   .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
   .list li { display: flex; gap: 8px; align-items: center; padding: 4px; border-bottom: 1px solid var(--line); }
   .list img { width: 36px; height: 36px; object-fit: contain; background: #fff; border-radius: 4px; }
   .link { background: none; border: 0; padding: 0; color: var(--accent); text-align: left; }
-  .card { border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
-  .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+  .detail { border: 1px solid var(--line); border-radius: var(--radius); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
   .imgs { display: flex; gap: 6px; flex-wrap: wrap; } .imgs img { height: 80px; background: #fff; border-radius: 4px; }
   table { font-size: 12px; border-collapse: collapse; width: 100%; } td { padding: 2px 6px 2px 0; }
   textarea { flex: 1; min-height: 360px; font: 12px/1.4 var(--mono); resize: vertical; white-space: pre; }

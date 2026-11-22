@@ -7,6 +7,8 @@
     "build": "rm -rf dist/assets dist/index.html && vite build"
   },
   "dependencies": {
+    "@fontsource-variable/ibm-plex-sans": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "three": "0.170.0"
   },
   "devDependencies": {

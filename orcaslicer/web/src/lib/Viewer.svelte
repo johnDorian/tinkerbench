@@ -513,7 +513,7 @@
   .tools .seg { display: flex; }
   .tools .seg button:first-child { border-radius: 6px 0 0 6px; }
   .tools .seg button:last-child { border-radius: 0 6px 6px 0; border-left: 0; }
-  .tools .seg button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tools .seg button.on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
   .tools button:disabled { opacity: 0.5; cursor: default; }
   .tools .note { font-size: 12px; color: var(--muted); }
   .layers {

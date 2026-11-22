@@ -895,7 +895,7 @@
     font-size: 12px; padding: 3px 8px; background: var(--card); color: var(--text);
     border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
   }
-  .tools button.toggle.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tools button.toggle.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .tools label { display: flex; gap: 4px; align-items: center; }
 
   .bottom-bar {
@@ -917,12 +917,12 @@
     position: absolute; left: 0; top: 0; z-index: 5; width: min(320px, calc(100% - 16px));
     background: var(--card); border: 1px solid var(--line); border-radius: 8px;
     box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); padding: 8px; display: flex; flex-direction: column; gap: 6px;
-    font: 13px system-ui, sans-serif; max-height: calc(100% - 16px); overflow: auto;
+    font: 13px var(--sans); max-height: calc(100% - 16px); overflow: auto;
   }
   .pop-head { display: flex; align-items: center; gap: 6px; font-size: 12px; }
   .pop-head .close { margin-left: auto; border: 0; background: none; padding: 0 6px; font-size: 16px; line-height: 1; }
   .pop textarea {
-    width: 100%; font: 13px system-ui, sans-serif; background: var(--card); color: var(--text);
+    width: 100%; font: 13px var(--sans); background: var(--card); color: var(--text);
     border: 1px solid var(--line); border-radius: 6px; padding: 6px; resize: vertical;
   }
   .pop .actions { display: flex; gap: 6px; }
@@ -930,7 +930,6 @@
   .stale-note {
     font-size: 12px; color: var(--warn); background: var(--warn-soft); border-radius: 6px; padding: 4px 6px;
   }
-  .muted { color: var(--muted); }
 
   .overlay {
     position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none;
@@ -940,14 +939,14 @@
 
   /* DOM made in code (CSS2D), so these are global */
   :global(.part-label) {
-    white-space: nowrap; font: 600 12px/1.2 system-ui, sans-serif; color: var(--text);
+    white-space: nowrap; font: 600 12px/1.2 var(--sans); color: var(--text);
     background: color-mix(in srgb, var(--card) 88%, transparent); border: 1px solid var(--line);
     border-radius: 5px; padding: 2px 6px; box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
   }
   :global(.part-label.unlabelled) { color: var(--muted); font-style: italic; font-weight: 500; }
   :global(.pin) {
     width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--card); background: var(--accent);
-    color: #fff; font: 600 11px/16px system-ui, sans-serif; text-align: center; padding: 0; cursor: pointer;
+    color: var(--on-accent); font: 600 11px/16px var(--sans); text-align: center; padding: 0; cursor: pointer;
     box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
   }
   :global(.pin.stale) { opacity: 0.45; border-style: dashed; background: var(--muted); }
@@ -959,12 +958,12 @@
   :global(.feat) {
     position: relative; width: 16px; height: 16px; border-radius: 50%; padding: 0;
     border: 1.5px solid var(--accent); background: var(--card); color: var(--accent);
-    font: 600 10px/13px system-ui, sans-serif; cursor: default;
+    font: 600 10px/13px var(--sans); cursor: default;
   }
   :global(.feat .tip) {
     display: none; position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%);
     white-space: nowrap; background: var(--card); color: var(--text); border: 1px solid var(--line);
-    border-radius: 6px; padding: 2px 6px; font: 12px system-ui, sans-serif; pointer-events: none;
+    border-radius: 6px; padding: 2px 6px; font: 12px var(--sans); pointer-events: none;
   }
   :global(.feat:hover .tip), :global(.feat:focus-visible .tip) { display: block; }
 </style>

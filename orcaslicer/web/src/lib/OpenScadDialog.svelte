@@ -31,7 +31,7 @@
 <Modal title="From OpenSCAD" {onclose}>
   <p class="muted small">Imports the last rendered STL of an OpenSCAD workbench project into the model library.</p>
   {#if loadErr}
-    <p class="err">{loadErr}</p>
+    <p class="danger-text">{loadErr}</p>
   {:else if projects === null}
     <p class="muted">Loading projects…</p>
   {:else if !projects.length}
@@ -60,7 +60,5 @@
   li { display: flex; justify-content: space-between; align-items: center; gap: 10px; border-bottom: 1px solid var(--line); padding-bottom: 8px; }
   .info { display: flex; flex-direction: column; min-width: 0; }
   .name { font-weight: 600; }
-  .small { font-size: 12px; }
-  .err { color: var(--err); }
   p { margin: 0 0 10px; }
 </style>

@@ -44,7 +44,7 @@
   }
 </script>
 
-<section class="panel">
+<section class="block">
   <div class="row">
     <button class="primary" disabled={running || !plate.objects.length} onclick={onslice}>
       {running ? 'Slicing…' : status === 'idle' ? 'Slice' : 'Slice again'}
@@ -108,7 +108,7 @@
 {/if}
 
 <style>
-  .panel { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .block { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; min-height: 0; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .pill { font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
   .pill.done { color: var(--ok); border-color: var(--ok); }
@@ -128,9 +128,6 @@
   .file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
   .print { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
   .big { font-size: 15px; padding: 7px 18px; }
-  .muted { color: var(--muted); }
-  .small { font-size: 12px; }
   .confirm { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 0 10px; }
   .actions { display: flex; justify-content: flex-end; gap: 8px; }
-  a.button { text-decoration: none; }
 </style>

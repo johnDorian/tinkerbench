@@ -68,7 +68,7 @@
     background: none; padding: 5px 8px; font-size: 12px; text-align: left;
   }
   .count {
-    background: var(--accent); color: #fff; border-radius: 999px; padding: 0 6px; font-size: 11px;
+    background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 6px; font-size: 11px;
   }
   .count.feat { background: var(--line); color: var(--muted); }
   .chev { margin-left: auto; color: var(--muted); }
@@ -101,7 +101,6 @@
     display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: 50%;
     background: var(--card); border: 1px solid var(--accent); color: var(--accent); font-size: 10px;
   }
-  .muted { color: var(--muted); }
   input { margin: 0; }
   @media (max-width: 720px) {
     .parts-panel { width: 170px; }

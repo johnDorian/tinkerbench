@@ -100,7 +100,7 @@
 
 <style>
   .thread {
-    font: 13px/1.45 system-ui, sans-serif; background: var(--bg); border: 1px solid var(--line);
+    font: 13px/1.45 var(--sans); background: var(--bg); border: 1px solid var(--line);
     border-left: 3px solid var(--accent); border-radius: 6px; padding: 8px 10px; margin: 4px 10px 6px 3.6em;
     display: flex; flex-direction: column; gap: 6px; white-space: normal;
   }
@@ -120,11 +120,10 @@
   .new { background: var(--ok-soft); }
   .reply { border-top: 1px solid var(--line); padding-top: 6px; }
   textarea {
-    width: 100%; font: 13px system-ui, sans-serif; background: var(--card); color: var(--text);
+    width: 100%; font: 13px var(--sans); background: var(--card); color: var(--text);
     border: 1px solid var(--line); border-radius: 6px; padding: 6px; resize: vertical;
   }
   .actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .actions button { font-size: 12px; padding: 2px 8px; }
-  .spacer { flex: 1; }
   .link { background: none; border: 0; }
 </style>

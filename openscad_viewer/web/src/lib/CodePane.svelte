@@ -259,7 +259,6 @@
   .tab.changed { animation: flash 1.5s ease-out; }
   @keyframes flash { from { background: var(--flash); } }
   .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--err); }
-  .spacer { flex: 1; }
   .banner {
     display: flex; gap: 8px; align-items: center; padding: 6px 10px; font-size: 13px;
     background: var(--accent-soft); border-bottom: 1px solid var(--line); flex-shrink: 0;
@@ -279,14 +278,14 @@
   .line { flex: 1; padding: 0 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
   code { font: inherit; background: none; }
   .count {
-    font: 11px system-ui, sans-serif; background: var(--accent); color: #fff; border-radius: 999px; padding: 0 6px;
+    font: 11px var(--sans); background: var(--accent); color: var(--on-accent); border-radius: 999px; padding: 0 6px;
   }
   .composer {
     margin: 4px 10px 6px 3.6em; padding: 8px 10px; border: 1px solid var(--accent); border-radius: 6px;
-    background: var(--bg); display: flex; flex-direction: column; gap: 6px; font: 13px system-ui, sans-serif;
+    background: var(--bg); display: flex; flex-direction: column; gap: 6px; font: 13px var(--sans);
   }
   .composer textarea {
-    width: 100%; font: 13px system-ui, sans-serif; background: var(--card); color: var(--text);
+    width: 100%; font: 13px var(--sans); background: var(--card); color: var(--text);
     border: 1px solid var(--line); border-radius: 6px; padding: 6px; resize: vertical;
   }
   .composer textarea.mono { font: 12px/1.45 var(--mono); tab-size: 4; }

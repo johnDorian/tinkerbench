@@ -1,27 +1,8 @@
+/* Fritzing workbench: accent (teal). The shared look is in theme.css. */
 :root {
-  color-scheme: light;
-  --bg: #f4f6f5; --card: #fcfdfc; --text: #111413; --muted: #52605b; --faint: #8a9892;
-  --line: #dde4e1; --accent: #0f766e; --accent-soft: #e0f2ef;
-  --ok: #157a3d; --ok-soft: #e3f4e9; --err: #b42318; --err-soft: #fde8e6; --warn: #9a6200; --warn-soft: #fdf2d8;
-  --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+  --accent: #0f766e; --accent-soft: #e0f2ef; --on-accent: #fff; --flash: #b9e6df;
+  --side-w: 380px;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
-    color-scheme: dark;
-    --bg: #0e1110; --card: #181c1b; --text: #eef2f0; --muted: #b3bfba; --faint: #76847e;
-    --line: #2b3331; --accent: #2dd4bf; --accent-soft: #123330;
-    --ok: #4ade80; --ok-soft: #12301d; --err: #f97066; --err-soft: #3b1714; --warn: #fbbf24; --warn-soft: #3a2c0c;
-  }
+  :root { --accent: #2dd4bf; --accent-soft: #123330; --on-accent: #04201d; --flash: #1b4f49; }
 }
-* { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; }
-body { background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-button, .button, input, select, textarea {
-  font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px;
-  background: var(--card); color: var(--text); border: 1px solid var(--line);
-}
-button, .button { cursor: pointer; text-decoration: none; }
-button:disabled { opacity: .5; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.danger { color: var(--err); }
-button.on { background: var(--accent-soft); border-color: var(--accent); }

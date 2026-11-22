@@ -38,4 +38,4 @@ tasks:
 
   docker:build:
     cmds:
-      - docker build -t openscad-viewer .
+      - docker build --build-context shared=../web-shared -t openscad-viewer .

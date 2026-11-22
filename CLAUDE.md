@@ -4,6 +4,8 @@ Agent-driven workbenches for hobby electronics and 3D printing: three independen
 
 The repo is meant to become public: keep personal details (home network addresses, host names, paths, names) out of code, defaults, tests and docs. Deployment-specific values come from environment variables; defaults point at `localhost`.
 
+The three UIs share one look from [web-shared/theme.css](web-shared/theme.css) (neutral colours, the `.app > .topbar / .banner / .workspace` shell, `.panel`, `.panel-bar`, `.tabs`, `.seg`, buttons), imported in each `main.js` as `$shared/theme.css` (Vite alias in `vite.config.js`). Docker builds keep their per-app context and get `web-shared/` as the named build context `shared` (`additional_contexts` in compose, `--build-context shared=../web-shared` with plain `docker build`); a deployment's own compose file needs that too. Fonts (IBM Plex Sans, JetBrains Mono, @fontsource) are imported per app in `main.js`. Each app's `app.css` holds only its accent (OpenSCAD orange, Fritzing teal, OrcaSlicer blue) and app-specific colours.
+
 Root [Taskfile.yml](Taskfile.yml) includes `openscad:`, `fritzing:`, `orcaslicer:`; `task test` runs all Go tests. [docker-compose.yaml](docker-compose.yaml) is a standalone demo on localhost; real deployments use their own compose file and build from this folder.
 
 ## Apps

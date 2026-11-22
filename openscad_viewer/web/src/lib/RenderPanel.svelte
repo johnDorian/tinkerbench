@@ -31,7 +31,7 @@
   }
 </script>
 
-<div class="panel">
+<div class="render-panel">
   <div class="row">
     {#if rendering}
       <span class="pill busy">Rendering…</span>
@@ -86,10 +86,8 @@
 </div>
 
 <style>
-  .panel { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; overflow: auto; max-height: 100%; }
+  .render-panel { padding: 8px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; overflow: auto; max-height: 100%; }
   .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .spacer { flex: 1; }
-  .muted { color: var(--muted); }
   .pill { padding: 2px 8px; border-radius: 999px; font-weight: 600; font-size: 12px; background: var(--accent-soft); }
   .pill.ok { background: var(--ok-soft); color: var(--ok); }
   .pill.bad { background: var(--err-soft); color: var(--err); }

@@ -29,7 +29,7 @@ tasks:
 
   docker:build:
     cmds:
-      - docker build -t fritzing-viewer .
+      - docker build --build-context shared=../web-shared -t fritzing-viewer .
 
   docker:run:
     desc: run the image locally on http://localhost:8030 with data in ./data (Fritzing is inside)

@@ -1,44 +1,19 @@
+/* OpenSCAD workbench: accent (orange), 3D viewer and code colours. The shared look is in theme.css. */
 :root {
-  color-scheme: light;
-  --bg: #f6f6f3; --card: #fdfdfb; --text: #121211; --muted: #55544f; --faint: #8f8d86;
-  --line: #e1e0d9; --accent: #c2410c; --accent-soft: #fbeee6; --flash: #fcd9bd;
-  --ok: #157a3d; --ok-soft: #e3f4e9; --err: #b42318; --err-soft: #fde8e6; --warn: #9a6200; --warn-soft: #fdf2d8;
+  --accent: #c2410c; --accent-soft: #fbeee6; --on-accent: #fff; --flash: #fcd9bd;
   --viewer-bg: #f1f0ec; --viewer-grid: #d3d1c9; --viewer-plate: #e6e4dd; --model: #e8a33d;
-  --mono: ui-monospace, "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
-  /* code colors */
   --c-keyword: #a626a4; --c-number: #b76b01; --c-string: #50a14f; --c-comment: #8f8d86;
   --c-builtin: #0f6fbf; --c-title: #c2410c; --c-meta: #986801;
+  --left-w: minmax(0, 0.85fr);
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    color-scheme: dark;
-    --bg: #0f0f0e; --card: #1a1a18; --text: #f0efec; --muted: #b9b7af; --faint: #7a7872;
-    --line: #2d2d2a; --accent: #f97316; --accent-soft: #3a2113; --flash: #6a3412;
-    --ok: #4ade80; --ok-soft: #12301d; --err: #f97066; --err-soft: #3b1714; --warn: #fbbf24; --warn-soft: #3a2c0c;
+    --accent: #f97316; --accent-soft: #3a2113; --on-accent: #1a0d05; --flash: #6a3412;
     --viewer-bg: #161614; --viewer-grid: #34342f; --viewer-plate: #22221f; --model: #f0a540;
     --c-keyword: #d19af5; --c-number: #f5b461; --c-string: #98c379; --c-comment: #7a7872;
     --c-builtin: #61afef; --c-title: #fb923c; --c-meta: #e5c07b;
   }
 }
-
-* { box-sizing: border-box; }
-html, body { margin: 0; }
-body {
-  background: var(--bg); color: var(--text);
-  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-button, .button {
-  font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 6px; cursor: pointer;
-  background: var(--card); color: var(--text); border: 1px solid var(--line); text-decoration: none;
-}
-button:disabled { opacity: 0.5; cursor: default; }
-button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-button.danger { color: var(--err); }
-select {
-  font: inherit; font-size: 13px; padding: 4px 8px; border-radius: 6px;
-  background: var(--card); color: var(--text); border: 1px solid var(--line);
-}
-code { font-family: var(--mono); font-size: 0.92em; }
 
 /* highlight.js tokens */
 .hljs-keyword, .hljs-selector-tag { color: var(--c-keyword); }

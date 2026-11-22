@@ -8,7 +8,9 @@
 
 services:
   openscad:
-    build: ./openscad_viewer
+    build:
+      context: ./openscad_viewer
+      additional_contexts: { shared: ./web-shared }  # web-shared/theme.css
     restart: unless-stopped
     environment:
       PUBLIC_URL: http://localhost:8020
@@ -21,7 +23,9 @@ services:
       - "8020:8020"
 
   fritzing:
-    build: ./fritzing
+    build:
+      context: ./fritzing
+      additional_contexts: { shared: ./web-shared }  # web-shared/theme.css
     restart: unless-stopped
     environment:
       PUBLIC_URL: http://localhost:8030
@@ -31,7 +35,9 @@ services:
       - "8030:8030"
 
   orcaslicer:
-    build: ./orcaslicer
+    build:
+      context: ./orcaslicer
+      additional_contexts: { shared: ./web-shared }  # web-shared/theme.css
     restart: unless-stopped
     environment:
       PUBLIC_URL: http://localhost:8050

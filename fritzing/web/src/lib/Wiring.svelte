@@ -74,7 +74,7 @@
 
   <section>
     <div class="row"><h4>Connections</h4>
-      <span class="tabs">{#each VIEWS as v}<button class:on={tableView === v} onclick={() => (tableView = v)}>{v}</button>{/each}</span>
+      <span class="seg">{#each VIEWS as v}<button class:active={tableView === v} onclick={() => (tableView = v)}>{v}</button>{/each}</span>
     </div>
     {#if w.connections.length}
       {@const colour = w.connections.some((c) => c.color)}
@@ -131,13 +131,12 @@
 <style>
   .bar, .row { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
   .bar { justify-content: flex-start; }
-  .tabs { display: flex; gap: 4px; }
-  .msg { padding: 6px 10px; border-radius: 6px; font-size: 13px; }
+  .msg { padding: 6px 10px; border-radius: var(--radius-sm); font-size: 13px; }
   .msg.bad { background: var(--err-soft); color: var(--err); }
   .msg.warn { background: var(--warn-soft); color: var(--warn); }
   section { display: flex; flex-direction: column; gap: 6px; }
   h4 { margin: 8px 0 2px; }
-  .faint { color: var(--faint); font-size: 12px; margin: 0; }
+  .faint { font-size: 12px; margin: 0; }
   table, .md :global(table) { font-size: 13px; border-collapse: collapse; width: 100%; }
   th { text-align: left; color: var(--faint); font-weight: 600; }
   td, th, .md :global(td), .md :global(th) { padding: 3px 6px 3px 0; border-bottom: 1px solid var(--line); vertical-align: top; }

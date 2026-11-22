@@ -20,7 +20,7 @@
 
 <section class="block">
   <div class="head">
-    <h2>Models</h2>
+    <h2 class="section-title">Models</h2>
     <button onclick={onimport}>From OpenSCAD</button>
   </div>
 
@@ -55,7 +55,7 @@
         </div>
       </li>
     {:else}
-      <li class="muted empty">No models yet.</li>
+      <li class="muted nothing">No models yet.</li>
     {/each}
   </ul>
 </section>
@@ -63,7 +63,6 @@
 <style>
   .block { padding: 10px; min-height: 0; }
   .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; gap: 6px; }
-  h2 { font-size: 13px; margin: 0; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
   .drop {
     display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: center; font-size: 13px;
     border: 1px dashed var(--line); border-radius: 8px; padding: 8px; margin-bottom: 8px;
@@ -77,5 +76,5 @@
   .meta { font-size: 12px; color: var(--muted); margin: 2px 0 6px; }
   .actions { display: flex; flex-wrap: wrap; gap: 4px; }
   .actions button { font-size: 12px; padding: 2px 8px; }
-  .empty { font-size: 13px; }
+  .nothing { font-size: 13px; }
 </style>

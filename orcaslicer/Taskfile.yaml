@@ -39,4 +39,4 @@ tasks:
 
   docker:build:
     cmds:
-      - docker build -t orcaslicer .
+      - docker build --build-context shared=../web-shared -t orcaslicer .

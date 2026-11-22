@@ -6,7 +6,7 @@
 
 <section class="block">
   <div class="head">
-    <h2>Plates</h2>
+    <h2 class="section-title">Plates</h2>
     <button onclick={onnew}>+ New</button>
   </div>
   <ul class="list">
@@ -18,7 +18,7 @@
         </button>
       </li>
     {:else}
-      <li class="muted empty">No plates yet.</li>
+      <li class="muted nothing">No plates yet.</li>
     {/each}
   </ul>
 </section>
@@ -26,7 +26,6 @@
 <style>
   .block { padding: 10px; border-bottom: 1px solid var(--line); }
   .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-  h2 { font-size: 13px; margin: 0; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
   .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
   .item {
     width: 100%; text-align: left; display: flex; flex-direction: column; gap: 1px; border: 1px solid transparent;
@@ -36,5 +35,5 @@
   .item.active { border-color: var(--accent); background: var(--accent-soft); }
   .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { font-size: 12px; color: var(--muted); }
-  .empty { font-size: 13px; padding: 4px 8px; }
+  .nothing { font-size: 13px; padding: 4px 8px; }
 </style>

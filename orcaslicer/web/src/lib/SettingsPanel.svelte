@@ -55,8 +55,8 @@
   }
 </script>
 
-<section class="panel">
-  <h2>Profiles</h2>
+<section class="block">
+  <h2 class="section-title">Profiles</h2>
   <label class="row">
     <span>Printer</span>
     <select value={plate.machine} onchange={(e) => onprofile('machine', e.currentTarget.value)}>
@@ -90,7 +90,7 @@
     <p class="bedinfo">Bed: {plate.effective_bed}, set by the printer profile</p>
   {/if}
 
-  <h2>Settings</h2>
+  <h2 class="section-title">Settings</h2>
   {#each items as item (item.key)}
     {@const ov = plate.overrides?.[item.key]}
     {@const val = ov ?? presetValue(item)}
@@ -125,9 +125,8 @@
 </section>
 
 <style>
-  .panel { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
-  h2 { font-size: 13px; margin: 6px 0 2px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-  h2:first-child { margin-top: 0; }
+  .block { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+  .section-title:not(:first-child) { margin-top: 8px; }
   .row { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 6px; align-items: center; font-size: 13px; }
   .row select { width: 100%; min-width: 0; }
   .field {
@@ -143,6 +142,5 @@
   .input input[type="checkbox"] { width: 16px; height: 16px; }
   .unit { font-size: 12px; color: var(--muted); }
   .hint { grid-column: 1 / -1; font-size: 11px; color: var(--faint); }
-  .muted { color: var(--muted); font-size: 13px; }
   .bedinfo { margin: 0; font-size: 12px; color: var(--muted); }
 </style>

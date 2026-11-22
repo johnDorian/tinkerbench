@@ -72,5 +72,4 @@
   .buttons { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
   .buttons button { font-size: 12px; padding: 2px 7px; }
   .sep { width: 4px; }
-  .muted { color: var(--muted); font-size: 13px; }
 </style>

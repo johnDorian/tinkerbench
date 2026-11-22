@@ -38,7 +38,7 @@
 </div>
 
 {#if showCam && webcamUrl}
-  <div class="cam card">
+  <div class="cam panel">
     {#if camError}
       <p class="muted">Camera unavailable.</p>
     {:else}
@@ -64,5 +64,4 @@
   .cam { position: absolute; right: 16px; top: 52px; width: min(420px, calc(100% - 32px)); z-index: 20; }
   .cam img { display: block; width: 100%; }
   .cam p { margin: 10px; }
-  .muted { color: var(--muted); }
 </style>

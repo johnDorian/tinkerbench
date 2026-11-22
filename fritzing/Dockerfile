@@ -5,6 +5,8 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 COPY web/ ./
+# shared UI files (web-shared/ at the repo root), passed as the named build context "shared"
+COPY --from=shared . /web-shared/
 RUN npm run build
 
 # --- server: static Go binary (pure-Go SQLite) with the UI embedded ---

@@ -108,7 +108,7 @@
         {/if}
       </div>
 
-      <div class="panel">
+      <div class="side-panel">
         <fieldset>
           <legend>How is the scale known?</legend>
           {#each SCALES as s}
@@ -194,14 +194,13 @@
   dialog { width: min(1100px, 94vw); height: min(780px, 92vh); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); }
   dialog::backdrop { background: #0008; }
   header { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
-  .spacer { flex: 1; }
   .body { display: grid; grid-template-columns: minmax(0, 1fr) 340px; height: calc(100% - 46px); }
   .picture { display: flex; flex-direction: column; min-width: 0; padding: 10px; gap: 6px; background: var(--bg); }
   .picture img { flex: 1; min-height: 0; width: 100%; object-fit: contain; }
   .legend { margin: 0; font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .key { width: 12px; height: 3px; border-radius: 2px; display: inline-block; margin-left: 8px; }
   .key.outline { background: #e62828; } .key.step { background: #28bee6; } .key.tip { background: #ffa514; }
-  .panel { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; border-left: 1px solid var(--line); font-size: 13px; }
+  .side-panel { overflow: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; border-left: 1px solid var(--line); font-size: 13px; }
   fieldset { border: 1px solid var(--line); border-radius: 8px; margin: 0; padding: 8px 10px; }
   legend { padding: 0 4px; color: var(--muted); font-size: 12px; }
   .radio, .check { display: flex; gap: 6px; align-items: center; padding: 2px 0; }
@@ -224,10 +223,9 @@
   .link { background: none; border: 0; padding: 0; color: var(--accent); font-size: 12px; cursor: pointer; }
   .notes { margin: 0; padding-left: 16px; color: var(--muted); font-size: 12px; }
   .notes li { margin: 3px 0; }
-  .muted { color: var(--muted); }
   .error { color: var(--err); margin: 0; }
   @media (max-width: 880px) {
     .body { grid-template-columns: minmax(0, 1fr); height: auto; }
-    .panel { border-left: 0; border-top: 1px solid var(--line); }
+    .side-panel { border-left: 0; border-top: 1px solid var(--line); }
   }
 </style>
