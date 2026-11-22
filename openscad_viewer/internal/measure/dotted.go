@@ -132,14 +132,15 @@ func dottedPitch(gray *imaging.Gray) (dottedGrid, error) {
 	// Each block's own peak, near the grid's.
 	var got []dottedBlock
 	for _, b := range specs {
-		kx, ky, ok := b.sp.nearest(gkx, gky, dotLocalPct, dotLocalDeg*math.Pi/180)
+		relP, ang := b.sp.tolerance(math.Hypot(float64(gkx), float64(gky)))
+		kx, ky, ok := b.sp.nearest(gkx, gky, relP, ang)
 		if !ok {
 			continue
 		}
 		// The other family of lines is the same peak turned a quarter turn: on square paper it has
 		// the same period, so the two must agree.
 		perp := 0.0
-		if px, py, ok := b.sp.nearest(-ky, kx, dotLocalPct, dotLocalDeg*math.Pi/180); ok {
+		if px, py, ok := b.sp.nearest(-ky, kx, relP, ang); ok {
 			perp = b.sp.period(px, py)
 		}
 		got = append(got, dottedBlock{period: b.sp.period(kx, ky), angle: math.Atan2(float64(ky), float64(kx)), perp: perp, cx: b.cx, cy: b.cy})
@@ -156,11 +157,14 @@ func dottedPitch(gray *imaging.Gray) (dottedGrid, error) {
 			across = append(across, b.perp)
 		}
 	}
-	if len(along) > 0 {
-		ma, mc := median(along), median(across)
-		if math.Abs(ma-mc) > 0.05*math.Max(ma, mc) {
-			return dottedGrid{}, fmt.Errorf("the dots' two axes disagree (%.1f px vs %.1f px), so the scale would be unreliable", ma*dotHalf, mc*dotHalf)
-		}
+	// No block that sees both axes means the pitch is from one family of peaks alone, which
+	// is what an edge or a shadow also makes: unverified, so refuse rather than guess.
+	if len(along) == 0 {
+		return dottedGrid{}, errors.New("no part of the paper shows both axes of the grid at one pitch, so the scale cannot be verified")
+	}
+	ma, mc := median(along), median(across)
+	if math.Abs(ma-mc) > 0.05*math.Max(ma, mc) {
+		return dottedGrid{}, fmt.Errorf("the dots' two axes disagree (%.1f px vs %.1f px), so the scale would be unreliable", ma*dotHalf, mc*dotHalf)
 	}
 
 	// The blocks that agree with the photo's plane give the pitch. Their angles, averaged at
@@ -236,10 +240,18 @@ func (s *spectrum) normalise() {
 	}
 }
 
-// strongest is the fundamental of the lattice in the (normalised) spectrum: the local maximum
-// with the longest period that still reaches half the strongest. A lattice of dots at the
-// crossings has equal peaks at its fundamental and at its diagonals, and the fundamental is the
-// one with the longest period; a lattice of lines has the fundamental strongest anyway.
+// strongest is the fundamental of the square lattice in the (normalised) spectrum.
+//
+// Square paper has two families of lines a quarter turn apart with the same pitch, so a peak
+// is only a candidate when the peak turned by 90 degrees is there too, at the same period: a
+// lone peak is the part's edge, a shadow or the leakage of the mask, and on a small crop with
+// one block to look at such a peak can be the strongest of all. A candidate's strength is the
+// weaker of its pair. Of the candidates within half of the best, the one with the longest
+// period wins: a lattice of dots at the crossings has equal peaks at its fundamental and at its
+// diagonals (both pairs are square), and the fundamental is the longer one; a lattice of lines
+// has the fundamental strongest anyway.
+//
+// ok is false when no peak has a partner: the dots form no square lattice that can be read.
 func (s *spectrum) strongest() (kx, ky int, ok bool) {
 	s.normalise()
 	var pmax float64
@@ -253,22 +265,46 @@ func (s *spectrum) strongest() (kx, ky int, ok bool) {
 	if pmax == 0 {
 		return 0, 0, false
 	}
-	bestR := math.Inf(1)
+	type cand struct {
+		x, y  int
+		r, sc float64
+	}
+	var cands []cand
+	best := 0.0
 	for y := -s.R; y <= s.R; y++ {
 		for x := -s.R; x <= s.R; x++ {
 			if !s.inBand(x, y) {
 				continue
 			}
 			p := s.p[s.idx(x, y)]
-			if p < 0.5*pmax || !s.localMax(x, y) {
+			if p < 0.25*pmax || !s.localMax(x, y) {
 				continue
 			}
-			if r := math.Hypot(float64(x), float64(y)); r < bestR {
-				bestR, kx, ky = r, x, y
+			r := math.Hypot(float64(x), float64(y))
+			relP, ang := s.tolerance(r)
+			px, py, found := s.nearest(-y, x, relP, ang)
+			if !found || !s.localMax(px, py) {
+				continue
 			}
+			sc := math.Min(p, s.p[s.idx(px, py)])
+			cands = append(cands, cand{x, y, r, sc})
+			best = math.Max(best, sc)
+		}
+	}
+	bestR := math.Inf(1)
+	for _, c := range cands {
+		if c.sc >= 0.5*best && c.r < bestR {
+			bestR, kx, ky = c.r, c.x, c.y
 		}
 	}
 	return kx, ky, !math.IsInf(bestR, 1)
+}
+
+// tolerance is how far a peak at radius r (bins) may stray in period (relative) and in angle
+// (radians) and still be the same family: dotLocalPct and dotLocalDeg, or one and a half bins
+// where the spectrum is too coarse for those (a small block has few bins out to the grid).
+func (s *spectrum) tolerance(r float64) (relPeriod, angle float64) {
+	return math.Max(dotLocalPct, 1.5/r), math.Max(dotLocalDeg*math.Pi/180, math.Atan(1.5/r))
 }
 
 // localMax reports whether (kx, ky) is at least as strong as its eight neighbours.

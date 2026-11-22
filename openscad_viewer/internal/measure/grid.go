@@ -16,6 +16,7 @@ type gridScale struct {
 	MMPerPxAt              func(x, y float64) float64 // at a point, in full-resolution pixels
 	Method                 string                     // "Hough" or "dotted (projection)"
 	Note                   string
+	Blocks                 int // dotted: how many patches of paper agreed on the pitch (0 for Hough)
 }
 
 // scaleFromGrid recovers millimetres per pixel from graph paper. It first tries the solid
@@ -102,6 +103,9 @@ func dottedScale(gray *imaging.Gray, gridMM float64, hough error) (gridScale, er
 	}
 	note := fmt.Sprintf("grid: dots, not solid lines: %+.2f deg, %.2f px per %g mm cell (median of %d blocks)",
 		dg.AngleDeg, dg.PitchPx, gridMM, dg.Blocks)
+	if dg.Blocks < 3 {
+		note += fmt.Sprintf(". Only %d patch(es) of paper could be read, so the pitch had no others to be checked against: compare the 10 mm bar on the overlay with the grid, or pass dpi or scale_ref_mm if they differ", dg.Blocks)
+	}
 	typical := gridMM / dg.PitchPx
 	at := func(x, y float64) float64 { return gridMM / dg.PitchAt(x, y) }
 	return gridScale{
@@ -112,6 +116,7 @@ func dottedScale(gray *imaging.Gray, gridMM float64, hough error) (gridScale, er
 		SpreadPct:  100 * dg.SpreadFrac,
 		PxPerMMMin: dg.PitchMinPx / gridMM,
 		PxPerMMMax: dg.PitchMaxPx / gridMM,
+		Blocks:     dg.Blocks,
 	}, nil
 }
 

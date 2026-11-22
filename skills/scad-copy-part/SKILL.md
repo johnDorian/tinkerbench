@@ -75,6 +75,17 @@ much; above about 2% the result carries a perspective note. The scale is taken w
 is. For better accuracy anchor with `scale_ref_mm`, or ask for a shot from further away and
 straight down. Quote the numbers as measured.
 
+When the photo holds more than one piece, `objects_found` says so and only the largest is
+measured; the others are boxed in blue on the overlay, so pass `crop` to measure each. A small
+crop with too little paper may be refused for its grid scale: measure on the whole photo with
+`crop` instead (the grid is read from the whole photo), or pass `dpi` / `scale_ref_mm`.
+
+A long thin part whose axis bends (a spring strip, a hook seen edge-on) comes back with
+`centreline`: a polyline in mm, the thickness along it and circle fits for knuckles at its
+ends, with a ready `centreline = [...]` points list in the OpenSCAD block. Model the strip
+along that path (e.g. hulls of circles of `strip_thickness` between consecutive points),
+not from the steps, and let the person correct the bend by commenting on the model.
+
 A part standing above the paper (a photo from above) reads large, because its top
 is nearer the lens than the paper. When the scale came from graph paper or a camera
 and `camera_mm` was not given, the result says so. Ask the person for the height of

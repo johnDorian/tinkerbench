@@ -60,13 +60,15 @@ func choosePlan(o Options, camera bool) (plan, bool) {
 // every edge of the image.
 func (p plan) other() plan { return plan{split: !p.split, light: p.light} }
 
-// silhouette thresholds the image with plan p and returns the outline of the part, in image
-// pixels. ppm is millimetres-per-pixel's inverse when the scale is already known, or 0; it
-// sizes the morphology in millimetres when it is.
-func silhouette(img *imaging.RGB, p plan, ppm float64, o Options) (points, error) {
+// silhouette thresholds the image with plan p and returns the outline of the largest blob, the
+// part, in image pixels. The other blobs that are plausibly parts of their own come back too
+// (see plausibleOthers), so that they can be reported rather than silently dropped. ppm is
+// millimetres-per-pixel's inverse when the scale is already known, or 0; it sizes the
+// morphology in millimetres when it is.
+func silhouette(img *imaging.RGB, p plan, ppm float64, o Options) (points, []imaging.Blob, error) {
 	ch, err := imaging.Extract(img, o.Channel)
 	if err != nil {
-		return points{}, err
+		return points{}, nil, err
 	}
 	var mask *imaging.Gray
 	if p.split {
@@ -77,21 +79,22 @@ func silhouette(img *imaging.RGB, p plan, ppm float64, o Options) (points, error
 
 	blobs := imaging.Blobs(mask)
 	if len(blobs) == 0 {
-		return points{}, errors.New("no part found: try invert, another channel, or crop the image closer")
+		return points{}, nil, errors.New("no part found: try invert, another channel, or crop the image closer")
 	}
 	b := blobs[0]
-	if float64(b.Area) < 0.001*float64(len(mask.Pix)) {
-		return points{}, fmt.Errorf("the largest blob covers only %.3f%% of the image: try invert, another channel, or crop the image closer",
+	if float64(b.Area) < minPartShare*float64(len(mask.Pix)) {
+		return points{}, nil, fmt.Errorf("the largest blob covers only %.3f%% of the image: try invert, another channel, or crop the image closer",
 			100*float64(b.Area)/float64(len(mask.Pix)))
 	}
 	if len(b.Outline) < 12 {
-		return points{}, errors.New("the part outline is too small to measure")
+		return points{}, nil, errors.New("the part outline is too small to measure")
 	}
 	pts := points{X: make([]float64, len(b.Outline)), Y: make([]float64, len(b.Outline))}
 	for i, q := range b.Outline {
 		pts.X[i], pts.Y[i] = float64(q.X), float64(q.Y)
 	}
-	return pts, nil
+	others := plausibleOthers(blobs[1:], b.Area, len(mask.Pix))
+	return pts, others, nil
 }
 
 // splitMask is the scan path: a two-class threshold (Otsu unless one is given), then a

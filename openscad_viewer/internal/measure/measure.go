@@ -122,6 +122,12 @@ type Result struct {
 	Object       string  `json:"object"`       // how the part was found: split, "split, inverted", dark or light
 	Crop         []int   `json:"crop,omitempty"`
 
+	// ObjectsFound counts the part-sized objects in the photo, the measured one included. The
+	// others are not measured; OtherObjects says where they are, and a note says how to measure
+	// one of them.
+	ObjectsFound int      `json:"objects_found"`
+	OtherObjects []Object `json:"other_objects,omitempty"`
+
 	OverallLengthMM float64 `json:"overall_length_mm"`
 	OverallWidthMM  float64 `json:"overall_width_mm"`
 	Steps           []Step  `json:"steps"`
@@ -135,6 +141,13 @@ type Result struct {
 	GridSpreadPct  float64 `json:"grid_spread_pct,omitempty"`    // how much the grid pitch varies across the photo, in per cent
 	GridPxPerMMMin float64 `json:"grid_px_per_mm_min,omitempty"` // the least pixels per millimetre across the photo
 	GridPxPerMMMax float64 `json:"grid_px_per_mm_max,omitempty"` // the most
+	// GridBlocks is how many patches of dotted paper agreed on the pitch. Under 3, the scale
+	// rests on one or two readings that nothing could contradict; a note says so.
+	GridBlocks int `json:"grid_blocks,omitempty"`
+
+	// Centreline is set for a long thin part whose axis bends (a spring strip, a hook seen
+	// edge-on): its spine as a polyline in mm, with the local thickness and end circles.
+	Centreline *Centreline `json:"centreline,omitempty"`
 
 	OpenSCAD string   `json:"openscad"`
 	Notes    []string `json:"notes,omitempty"`
@@ -175,11 +188,12 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 	}
 
 	p, auto := choosePlan(o, meta.Camera)
-	outline, p, err := segmentAll(work, p, auto, ppm, o, res)
+	outline, p, others, err := segmentAll(work, p, auto, ppm, o, res)
 	if err != nil {
 		return nil, err
 	}
 	res.Object = p.name()
+	res.ObjectsFound = 1 + len(others)
 
 	pts, angle, fr := toAxes(outline)
 	spanPx := maxOf(pts.X)
@@ -227,12 +241,24 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 		res.GridSpreadPct = round2(sc.spread.SpreadPct)
 		res.GridPxPerMMMin = round2(sc.spread.PxPerMMMin)
 		res.GridPxPerMMMax = round2(sc.spread.PxPerMMMax)
+		res.GridBlocks = sc.spread.Blocks
 		if sc.spread.SpreadPct > 2 {
 			res.Notes = append(res.Notes, fmt.Sprintf("the photo has perspective: the scale varies by %.1f%% across it (%.2f to %.2f px per mm); the scale near the part was used. For better accuracy anchor with scale_ref_mm, or shoot from further away and straight down.", sc.spread.SpreadPct, sc.spread.PxPerMMMin, sc.spread.PxPerMMMax))
 		}
 	}
 	if o.CameraMM <= 0 && (sc.grid || meta.Camera) {
 		res.Notes = append(res.Notes, "Features standing above the paper read large in a photo: their top is nearer the lens than the paper, so it images bigger. Pass thickness_mm (the height of the measured feature above the paper) and camera_mm (lens to paper, e.g. 300) to correct for it; without them the numbers are the paper's scale.")
+	}
+
+	// The other objects are reported with their boxes in full-image pixels; the note says
+	// which one was measured, so the person can take a crop round another.
+	ox, oy := 0, 0
+	if o.Crop != nil {
+		ox, oy = o.Crop[0], o.Crop[1]
+	}
+	if len(others) > 0 {
+		res.OtherObjects = otherObjects(others, ox, oy, res.ScaleMMPerPx)
+		res.Notes = append(res.Notes, objectsNote(res.ObjectsFound, shiftBox(outlineBox(outline), ox, oy)))
 	}
 
 	// Which end leads? The rounder one, unless told otherwise. A half-round tip is an arc
@@ -270,6 +296,13 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 			FitRMSMM:   round4(tip.RMS * mmPx),
 		}
 	}
+	// A long thin strip whose axis bends has no meaningful widths along one straight axis, so
+	// it also gets a centreline: the polyline, the thickness along it and the knuckles at its
+	// ends, which is what a model of a bent strip is built from.
+	if cl, ok := centreline(fillOutline(outline, work.W, work.H), mmPx); ok {
+		res.Centreline = cl
+		res.Notes = append(res.Notes, fmt.Sprintf("The part is a bent strip (%.1f mm along its centreline, %.2f mm thick, bowing %.1f mm off its chord), so the steps along one straight axis mean little: use centreline (points_mm, thickness_mm, ends) instead. The centreline is drawn in green on the overlay.", cl.LengthMM, cl.MedianThicknessMM, cl.SagMM))
+	}
 	res.OpenSCAD = scadBlock(res)
 	res.Notes = append(res.Notes,
 		"Z is not measured: thickness, boss height, bore depth and wall thickness need a caliper.",
@@ -277,7 +310,17 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 		"Check the overlay before trusting these numbers: a shadow or a caliper jaw merged into the outline is the usual way this goes wrong.")
 
 	if o.Overlay {
-		png, err := drawOverlay(work, outline, fr, res, o)
+		view := overlayView(outlineBox(outline), work.W, work.H)
+		if view != nil {
+			full := shiftBox(view, ox, oy)
+			note := fmt.Sprintf("The overlay is cropped to the part, [%d, %d, %d, %d] of the %dx%d photo, so that it can be read; the rest of the photo is not drawn.",
+				full[0], full[1], full[2], full[3], img.W, img.H)
+			if len(others) > 0 {
+				note += " The whole photo is in a corner inset, with the crop in orange and the other objects in blue."
+			}
+			res.Notes = append(res.Notes, note)
+		}
+		png, err := drawOverlay(work, outline, fr, res, o, view, others)
 		if err != nil {
 			return nil, fmt.Errorf("overlay: %w", err)
 		}
@@ -289,23 +332,25 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 // segmentAll finds the outline with plan p. An automatic choice whose outline reaches every
 // edge of the image (the background, not the part) is tried the other way round once; the
 // result says so when that is what was used.
-func segmentAll(img *imaging.RGB, p plan, auto bool, ppm float64, o Options, res *Result) (points, plan, error) {
-	outline, err := silhouette(img, p, ppm, o)
+//
+// The other objects in the photo come back with the outline, for the result to report.
+func segmentAll(img *imaging.RGB, p plan, auto bool, ppm float64, o Options, res *Result) (points, plan, []imaging.Blob, error) {
+	outline, others, err := silhouette(img, p, ppm, o)
 	if err != nil {
-		return points{}, p, err
+		return points{}, p, nil, err
 	}
 	if !spansImage(outline, img.W, img.H) {
-		return outline, p, nil
+		return outline, p, others, nil
 	}
 	if auto {
 		alt := p.other()
-		if second, err := silhouette(img, alt, ppm, o); err == nil && !spansImage(second, img.W, img.H) {
+		if second, altOthers, err := silhouette(img, alt, ppm, o); err == nil && !spansImage(second, img.W, img.H) {
 			res.Notes = append(res.Notes, fmt.Sprintf("The %s method reached every edge of the image, so the part was found with the %s method instead.", p.name(), alt.name()))
-			return second, alt, nil
+			return second, alt, altOthers, nil
 		}
 	}
 	res.Notes = append(res.Notes, "The shape measured reaches every edge of the image, which usually means the background was picked instead of the part: try the invert option, another channel, object, or crop closer.")
-	return outline, p, nil
+	return outline, p, others, nil
 }
 
 // spansImage reports whether an outline touches all four edges of the image. The part
@@ -502,6 +547,12 @@ func scadBlock(r *Result) string {
 	}
 	if r.RoundEnd != nil {
 		fmt.Fprintf(&b, "tip_radius = %.2f;  // arc centre at x = %.2f\n", r.RoundEnd.RadiusMM, r.RoundEnd.CentreXMM)
+	}
+	if r.Centreline != nil {
+		b.WriteString(r.Centreline.OpenSCAD)
+		if !strings.HasSuffix(r.Centreline.OpenSCAD, "\n") {
+			b.WriteString("\n")
+		}
 	}
 	b.WriteString("thickness = 0;  // Z is not measured: use a caliper\n")
 	return b.String()
