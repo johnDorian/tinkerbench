@@ -138,7 +138,7 @@ func checkPart(t *testing.T, r *Result, tol float64) {
 func TestScan(t *testing.T) {
 	for _, angle := range []float64{0, 7, -11} {
 		img := renderPart(1200, angle, 0, false)
-		res, err := Measure(img, 1200, Options{Overlay: true})
+		res, err := Measure(img, imaging.Meta{DPI: 1200}, Options{Overlay: true})
 		if err != nil {
 			t.Fatalf("%+g deg: %v", angle, err)
 		}
@@ -159,7 +159,7 @@ func TestScan(t *testing.T) {
 func TestGridPhoto(t *testing.T) {
 	for _, angle := range []float64{0, -11} {
 		img := renderPart(508, angle, 1.0, false) // 508 dpi = 20 px per mm
-		res, err := Measure(img, 0, Options{GridMM: 1.0})
+		res, err := Measure(img, imaging.Meta{}, Options{GridMM: 1.0})
 		if err != nil {
 			t.Fatalf("%+g deg: %v", angle, err)
 		}
@@ -173,7 +173,7 @@ func TestGridPhoto(t *testing.T) {
 // nor graph paper.
 func TestScaleRef(t *testing.T) {
 	img := renderPart(600, 3, 0, false)
-	res, err := Measure(img, 0, Options{ScaleRefMM: totalLen})
+	res, err := Measure(img, imaging.Meta{}, Options{ScaleRefMM: totalLen})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -186,7 +186,7 @@ func TestInvert(t *testing.T) {
 	img := renderPart(600, 0, 0, true)
 	// Without invert the dark background is taken for the part. That cannot be detected
 	// for certain, but it reaches every edge of the image, which is worth saying.
-	wrong, err := Measure(img, 600, Options{})
+	wrong, err := Measure(img, imaging.Meta{DPI: 600}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,7 +197,7 @@ func TestInvert(t *testing.T) {
 		t.Errorf("want a note suggesting invert, got %q", wrong.Notes)
 	}
 
-	res, err := Measure(img, 600, Options{Invert: true})
+	res, err := Measure(img, imaging.Meta{DPI: 600}, Options{Invert: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestInvert(t *testing.T) {
 // TestFlip forces the blunt end to lead instead of the round one.
 func TestFlip(t *testing.T) {
 	img := renderPart(600, 0, 0, false)
-	res, err := Measure(img, 600, Options{Flip: true})
+	res, err := Measure(img, imaging.Meta{DPI: 600}, Options{Flip: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -222,7 +222,7 @@ func TestFlip(t *testing.T) {
 // TestNoScale refuses to report dimensions it cannot justify.
 func TestNoScale(t *testing.T) {
 	img := renderPart(600, 0, 0, false)
-	_, err := Measure(img, 0, Options{})
+	_, err := Measure(img, imaging.Meta{}, Options{})
 	if err == nil {
 		t.Fatal("want an error when nothing gives a scale")
 	}
@@ -232,11 +232,11 @@ func TestNoScale(t *testing.T) {
 // larger than its footprint.
 func TestParallax(t *testing.T) {
 	img := renderPart(600, 0, 0, false)
-	plain, err := Measure(img, 600, Options{})
+	plain, err := Measure(img, imaging.Meta{DPI: 600}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	corrected, err := Measure(img, 600, Options{ThicknessMM: 3, CameraMM: 300})
+	corrected, err := Measure(img, imaging.Meta{DPI: 600}, Options{ThicknessMM: 3, CameraMM: 300})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +253,7 @@ func TestBlankImage(t *testing.T) {
 	for i := range img.Pix {
 		img.Pix[i] = 235
 	}
-	if _, err := Measure(img, 600, Options{}); err == nil {
+	if _, err := Measure(img, imaging.Meta{DPI: 600}, Options{}); err == nil {
 		t.Fatal("want an error for an image with no part in it")
 	}
 }

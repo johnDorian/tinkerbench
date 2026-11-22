@@ -73,7 +73,15 @@
         <span class="name" title={img.name}>{img.name}</span>
         <span class="meta">
           {img.width}&times;{img.height}
-          {#if img.dpi}· {Math.round(img.dpi)} dpi{:else}· no dpi{/if}
+          {#if img.camera}
+            · {img.camera}{#if img.dpi} · <span class="dpi-note" title="A phone camera writes a default dpi; it says nothing about the scale">{Math.round(img.dpi)} dpi (camera default, not a scale)</span>{/if}
+          {:else if img.dpi && img.dpi_usable}
+            · {Math.round(img.dpi)} dpi
+          {:else if img.dpi}
+            · <span class="dpi-note">{Math.round(img.dpi)} dpi (not a scale)</span>
+          {:else}
+            · no dpi
+          {/if}
           · {kb(img.size)} · {ago(img.modified)}
         </span>
         <span class="row">
@@ -102,6 +110,7 @@
   figcaption { display: flex; flex-direction: column; gap: 2px; }
   .name { font: 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .meta { color: var(--muted); font-size: 11px; }
+  .dpi-note { color: var(--faint); }
   .row { display: flex; gap: 8px; }
   .link { background: none; border: 0; padding: 0; color: var(--accent); font-size: 12px; cursor: pointer; text-decoration: none; }
   .link.danger { color: var(--err); }

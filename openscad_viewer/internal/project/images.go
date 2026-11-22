@@ -32,11 +32,15 @@ type Image struct {
 	Name     string    `json:"name"`
 	Size     int64     `json:"size"`
 	Modified time.Time `json:"modified"`
-	// Width, Height and DPI are filled in by the caller that can decode the file; the
-	// store itself does not look inside it.
-	Width  int     `json:"width,omitempty"`
-	Height int     `json:"height,omitempty"`
-	DPI    float64 `json:"dpi,omitempty"`
+	// Width, Height (after EXIF rotation, as a photo viewer shows it), DPI, Camera and
+	// DPIUsable are filled in by the caller that can decode the file; the store itself does
+	// not look inside it. DPI is what the file records. It is a scale only when DPIUsable:
+	// a camera writes 72 or 300 whatever it photographed.
+	Width     int     `json:"width,omitempty"`
+	Height    int     `json:"height,omitempty"`
+	DPI       float64 `json:"dpi,omitempty"`
+	Camera    string  `json:"camera,omitempty"` // "Make Model" from EXIF, when a camera took it
+	DPIUsable bool    `json:"dpi_usable"`
 }
 
 // ValidImage reports whether file is a usable image name.

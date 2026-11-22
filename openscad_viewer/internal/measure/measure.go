@@ -4,8 +4,9 @@
 //
 // The intended workflow is a flatbed scanner: lay the part flat face down, scan at
 // 600-1200 dpi, measure. The scan resolution is the scale, so there is no perspective and
-// no parallax to correct. For a phone photo on 1 mm graph paper the scale can instead be
-// recovered from the grid, or anchored to one known dimension.
+// no parallax to correct. A phone photo on graph paper gets its scale from the grid (solid
+// lines, or the dots between them), or from one known dimension. A camera's recorded dpi is
+// a default, never a scale.
 //
 // Nothing here measures Z. Thickness, boss height, bore depth and wall thickness still
 // need a caliper.
@@ -30,15 +31,19 @@ const (
 	DefaultOverlayPx = 1200 // long edge of the overlay image
 )
 
-// Options control a measurement. The three scale sources are tried in the order
-// ScaleRefMM, GridMM, DPI; at least one has to resolve or Measure fails, because without a
-// scale every dimension is meaningless.
+// Options control a measurement. The scale comes from the first of ScaleRefMM, GridMM and
+// the dpi (explicit, else the file's, which a camera's does not count as) that applies; at
+// least one has to resolve or Measure fails, because without a scale every dimension is
+// meaningless.
 type Options struct {
-	DPI         float64 `json:"dpi"`          // scan resolution; 0 = read it from the file
+	DPI         float64 `json:"dpi"`          // scan resolution; 0 = the file's, if it is a scanner's
 	GridMM      float64 `json:"grid_mm"`      // graph paper pitch, for photos
 	ScaleRefMM  float64 `json:"scale_ref_mm"` // known overall length, to anchor the scale
-	ThicknessMM float64 `json:"thickness_mm"` // with CameraMM, corrects photo parallax
+	ThicknessMM float64 `json:"thickness_mm"` // height of the part above the paper, with CameraMM corrects parallax
 	CameraMM    float64 `json:"camera_mm"`    // lens-to-paper distance
+	Object      string  `json:"object"`       // auto (default), dark, light or split: how the part is found
+	Threshold   int     `json:"threshold"`    // grey level that separates the part; 0 = automatic
+	Crop        []int   `json:"crop"`         // [left, top, right, bottom] in pixels of the upright image; measure inside it
 	Invert      bool    `json:"invert"`       // the part is lighter than the background
 	Channel     string  `json:"channel"`      // gray (a scan), or a / b / sat on a photo
 	TolMM       float64 `json:"tol_mm"`       // width tolerance within one step
@@ -49,6 +54,12 @@ type Options struct {
 }
 
 func (o *Options) defaults() {
+	if o.Object == "" {
+		o.Object = ObjectAuto
+	}
+	if len(o.Crop) == 0 {
+		o.Crop = nil
+	}
 	if o.TolMM <= 0 {
 		o.TolMM = DefaultTolMM
 	}
@@ -62,6 +73,26 @@ func (o *Options) defaults() {
 		o.OverlayPx = DefaultOverlayPx
 	}
 	o.OverlayPx = min(o.OverlayPx, 3000)
+}
+
+// check reports an option that cannot be used on an image of size w x h.
+func (o Options) check(w, h int) error {
+	if !validObject(o.Object) {
+		return fmt.Errorf("object %q: use auto, dark, light or split", o.Object)
+	}
+	if o.Threshold < 0 || o.Threshold > 255 {
+		return fmt.Errorf("threshold %d: use a grey level from 1 to 255, or 0 for automatic", o.Threshold)
+	}
+	if o.Crop != nil {
+		if len(o.Crop) != 4 {
+			return fmt.Errorf("crop %v: give [left, top, right, bottom] in pixels", o.Crop)
+		}
+		l, t, r, b := o.Crop[0], o.Crop[1], o.Crop[2], o.Crop[3]
+		if l < 0 || t < 0 || r > w || b > h || r-l < 16 || b-t < 16 {
+			return fmt.Errorf("crop %v is outside the %dx%d image, or smaller than 16 px", o.Crop, w, h)
+		}
+	}
+	return nil
 }
 
 // Step is one run of constant width along the part.
@@ -88,6 +119,8 @@ type Result struct {
 	ScaleFrom    string  `json:"scale_from"`
 	RotationDeg  float64 `json:"rotation_deg"` // how the part lay in the image
 	Flipped      bool    `json:"flipped"`      // the far end was taken as x = 0
+	Object       string  `json:"object"`       // how the part was found: split, "split, inverted", dark or light
+	Crop         []int   `json:"crop,omitempty"`
 
 	OverallLengthMM float64 `json:"overall_length_mm"`
 	OverallWidthMM  float64 `json:"overall_width_mm"`
@@ -99,6 +132,10 @@ type Result struct {
 	TipFitRMSMM float64   `json:"tip_fit_rms_mm"`
 
 	// OpenSCAD is a variable block to paste at the top of main.scad.
+	GridSpreadPct  float64 `json:"grid_spread_pct,omitempty"`    // how much the grid pitch varies across the photo, in per cent
+	GridPxPerMMMin float64 `json:"grid_px_per_mm_min,omitempty"` // the least pixels per millimetre across the photo
+	GridPxPerMMMax float64 `json:"grid_px_per_mm_max,omitempty"` // the most
+
 	OpenSCAD string   `json:"openscad"`
 	Notes    []string `json:"notes,omitempty"`
 
@@ -108,28 +145,71 @@ type Result struct {
 	Overlay []byte `json:"-"`
 }
 
-// Measure measures the part in img. fileDPI is the resolution stored in the image file, or
-// 0; it is used when Options gives no scale of its own.
-func Measure(img *imaging.RGB, fileDPI float64, o Options) (*Result, error) {
+// Measure measures the part in img, which is the image as a photo viewer shows it (EXIF
+// orientation already applied). meta is what the file says about itself: its recorded
+// resolution is a scale only when it is a scanner's, not a camera's.
+func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 	o.defaults()
+	if err := o.check(img.W, img.H); err != nil {
+		return nil, err
+	}
+	res := &Result{}
+	work := img
+	if o.Crop != nil {
+		work = crop(img, o.Crop)
+		res.Crop = append([]int(nil), o.Crop...)
+		res.Notes = append(res.Notes, fmt.Sprintf("Measured inside the crop [%d, %d, %d, %d] of the %dx%d image.",
+			o.Crop[0], o.Crop[1], o.Crop[2], o.Crop[3], img.W, img.H))
+	}
 
-	outline, err := silhouette(img, o)
+	// Where the scale does not need the outline (a grid, or the file's dpi), it comes first,
+	// so that segmentation can work in millimetres. The grid is read from the whole image,
+	// because the paper is all over it even when the crop is not.
+	sc, err := preScale(img, meta, o, res)
 	if err != nil {
 		return nil, err
 	}
+	ppm := 0.0
+	if sc.mmPerPx > 0 {
+		ppm = 1 / sc.mmPerPx
+	}
+
+	p, auto := choosePlan(o, meta.Camera)
+	outline, p, err := segmentAll(work, p, auto, ppm, o, res)
+	if err != nil {
+		return nil, err
+	}
+	res.Object = p.name()
+
 	pts, angle, fr := toAxes(outline)
 	spanPx := maxOf(pts.X)
 	if spanPx <= 0 {
 		return nil, errors.New("the part has no extent along its own axis; check the overlay")
 	}
+	res.RotationDeg = round2(angle)
 
-	res := &Result{RotationDeg: round2(angle)}
-	if spansImage(outline, img.W, img.H) {
-		res.Notes = append(res.Notes, "The shape measured reaches every edge of the image, which usually means the background was picked instead of the part: try the invert option, another channel, or crop closer.")
+	mmPx, how := sc.mmPerPx, sc.how
+	if mmPx == 0 { // scale_ref_mm: the one scale that needs the outline
+		mmPx = o.ScaleRefMM / spanPx
+		how = fmt.Sprintf("anchored to %g mm", o.ScaleRefMM)
 	}
-	mmPx, how, err := scale(img, spanPx, fileDPI, o, res)
-	if err != nil {
-		return nil, err
+	if sc.at != nil {
+		// Graph paper's pitch changes across a photo, so the scale is the one where the part is,
+		// not the photo's typical one. The outline's centre, in full-image pixels.
+		var cx, cy float64
+		for i := range outline.X {
+			cx += outline.X[i]
+			cy += outline.Y[i]
+		}
+		cx, cy = cx/float64(outline.len()), cy/float64(outline.len())
+		if o.Crop != nil {
+			cx, cy = cx+float64(o.Crop[0]), cy+float64(o.Crop[1])
+		}
+		local := sc.at(cx, cy)
+		if math.Abs(local/sc.mmPerPx-1) > 0.005 {
+			res.Notes = append(res.Notes, fmt.Sprintf("The scale is taken where the part is, %.4g mm per pixel there, which is %+.1f%% from the photo's typical grid pitch.", local, 100*(local/sc.mmPerPx-1)))
+		}
+		mmPx = local
 	}
 
 	// A photo images the top face of the part larger than its footprint, because the face
@@ -143,6 +223,17 @@ func Measure(img *imaging.RGB, fileDPI float64, o Options) (*Result, error) {
 		how += fmt.Sprintf(", parallax -%.2f%%", (1-k)*100)
 	}
 	res.ScaleMMPerPx, res.ScaleFrom = round6(mmPx), how
+	if sc.grid {
+		res.GridSpreadPct = round2(sc.spread.SpreadPct)
+		res.GridPxPerMMMin = round2(sc.spread.PxPerMMMin)
+		res.GridPxPerMMMax = round2(sc.spread.PxPerMMMax)
+		if sc.spread.SpreadPct > 2 {
+			res.Notes = append(res.Notes, fmt.Sprintf("the photo has perspective: the scale varies by %.1f%% across it (%.2f to %.2f px per mm); the scale near the part was used. For better accuracy anchor with scale_ref_mm, or shoot from further away and straight down.", sc.spread.SpreadPct, sc.spread.PxPerMMMin, sc.spread.PxPerMMMax))
+		}
+	}
+	if o.CameraMM <= 0 && (sc.grid || meta.Camera) {
+		res.Notes = append(res.Notes, "Features standing above the paper read large in a photo: their top is nearer the lens than the paper, so it images bigger. Pass thickness_mm (the height of the measured feature above the paper) and camera_mm (lens to paper, e.g. 300) to correct for it; without them the numbers are the paper's scale.")
+	}
 
 	// Which end leads? The rounder one, unless told otherwise. A half-round tip is an arc
 	// of about half the local width, so the points within one width of each tip are the
@@ -186,7 +277,7 @@ func Measure(img *imaging.RGB, fileDPI float64, o Options) (*Result, error) {
 		"Check the overlay before trusting these numbers: a shadow or a caliper jaw merged into the outline is the usual way this goes wrong.")
 
 	if o.Overlay {
-		png, err := drawOverlay(img, outline, fr, res, o)
+		png, err := drawOverlay(work, outline, fr, res, o)
 		if err != nil {
 			return nil, fmt.Errorf("overlay: %w", err)
 		}
@@ -195,35 +286,26 @@ func Measure(img *imaging.RGB, fileDPI float64, o Options) (*Result, error) {
 	return res, nil
 }
 
-// silhouette thresholds the image and returns the outline of the part, in image pixels.
-func silhouette(img *imaging.RGB, o Options) (points, error) {
-	ch, err := imaging.Extract(img, o.Channel)
+// segmentAll finds the outline with plan p. An automatic choice whose outline reaches every
+// edge of the image (the background, not the part) is tried the other way round once; the
+// result says so when that is what was used.
+func segmentAll(img *imaging.RGB, p plan, auto bool, ppm float64, o Options, res *Result) (points, plan, error) {
+	outline, err := silhouette(img, p, ppm, o)
 	if err != nil {
-		return points{}, err
+		return points{}, p, err
 	}
-	blur := imaging.Blur5(ch)
-	mask := imaging.Threshold(blur, imaging.Otsu(blur), o.Invert)
-	se := imaging.EllipseSE(7)
-	mask = imaging.Close(mask, se) // bridge the graph-paper lines crossing the part
-	mask = imaging.Open(mask, se)  // drop speckle
-
-	blobs := imaging.Blobs(mask)
-	if len(blobs) == 0 {
-		return points{}, errors.New("no part found: try invert, another channel, or crop the image closer")
+	if !spansImage(outline, img.W, img.H) {
+		return outline, p, nil
 	}
-	b := blobs[0]
-	if float64(b.Area) < 0.001*float64(len(mask.Pix)) {
-		return points{}, fmt.Errorf("the largest blob covers only %.3f%% of the image: try invert, another channel, or crop the image closer",
-			100*float64(b.Area)/float64(len(mask.Pix)))
+	if auto {
+		alt := p.other()
+		if second, err := silhouette(img, alt, ppm, o); err == nil && !spansImage(second, img.W, img.H) {
+			res.Notes = append(res.Notes, fmt.Sprintf("The %s method reached every edge of the image, so the part was found with the %s method instead.", p.name(), alt.name()))
+			return second, alt, nil
+		}
 	}
-	if len(b.Outline) < 12 {
-		return points{}, errors.New("the part outline is too small to measure")
-	}
-	p := points{X: make([]float64, len(b.Outline)), Y: make([]float64, len(b.Outline))}
-	for i, q := range b.Outline {
-		p.X[i], p.Y[i] = float64(q.X), float64(q.Y)
-	}
-	return p, nil
+	res.Notes = append(res.Notes, "The shape measured reaches every edge of the image, which usually means the background was picked instead of the part: try the invert option, another channel, object, or crop closer.")
+	return outline, p, nil
 }
 
 // spansImage reports whether an outline touches all four edges of the image. The part
@@ -239,122 +321,59 @@ func spansImage(p points, w, h int) bool {
 	return l && r && t && b
 }
 
-// scale works out millimetres per pixel.
-func scale(img *imaging.RGB, spanPx, fileDPI float64, o Options, res *Result) (float64, string, error) {
+// scaleSource is a scale that does not need the outline.
+type scaleSource struct {
+	mmPerPx float64                    // 0 when the scale needs the outline (scale_ref_mm)
+	at      func(x, y float64) float64 // graph paper: the scale at a point, full-image pixels; nil otherwise
+	how     string                     // what it came from, for ScaleFrom
+	grid    bool                       // it came from graph paper
+	spread  gridScale                  // the grid's spread and range, when it came from graph paper
+}
+
+// preScale works out the scale from the grid or from the dpi, or defers to scale_ref_mm.
+func preScale(img *imaging.RGB, meta imaging.Meta, o Options, res *Result) (scaleSource, error) {
 	switch {
 	case o.ScaleRefMM > 0:
-		return o.ScaleRefMM / spanPx, fmt.Sprintf("anchored to %g mm", o.ScaleRefMM), nil
+		return scaleSource{}, nil
 	case o.GridMM > 0:
 		gray, err := imaging.Extract(img, imaging.ChannelGray)
 		if err != nil {
-			return 0, "", err
+			return scaleSource{}, err
 		}
-		mmPx, note, err := scaleFromGrid(gray, o.GridMM)
+		gs, err := scaleFromGrid(gray, o.GridMM)
 		if err != nil {
-			return 0, "", err
+			return scaleSource{}, err
 		}
-		res.Notes = append(res.Notes, note)
-		return mmPx, fmt.Sprintf("%g mm grid (Hough)", o.GridMM), nil
+		res.Notes = append(res.Notes, gs.Note)
+		return scaleSource{mmPerPx: gs.MMPerPx, at: gs.MMPerPxAt, how: fmt.Sprintf("%g mm grid, %s", o.GridMM, gs.Method), grid: true, spread: gs}, nil
 	}
 	dpi := o.DPI
 	if dpi <= 0 {
-		dpi = fileDPI
+		if meta.Camera {
+			if meta.DPI > 1 {
+				return scaleSource{}, fmt.Errorf("this is a camera photo; its %g dpi is a default, not a measurement: pass grid_mm, scale_ref_mm or dpi", meta.DPI)
+			}
+			return scaleSource{}, errors.New("this is a camera photo, which records no scale: pass grid_mm, scale_ref_mm or dpi")
+		}
+		dpi = meta.DPI
 	}
 	if dpi <= 1 {
-		return 0, "", errors.New("no scale: the image does not record a dpi, so pass dpi, grid_mm or scale_ref_mm")
+		return scaleSource{}, errors.New("no scale: the image does not record a dpi, so pass dpi, grid_mm or scale_ref_mm")
 	}
-	return 25.4 / dpi, fmt.Sprintf("%g dpi", dpi), nil
+	return scaleSource{mmPerPx: 25.4 / dpi, how: fmt.Sprintf("%g dpi", dpi)}, nil
 }
 
-// scaleFromGrid recovers millimetres per pixel from graph paper: a Hough transform for the
-// paper's angle, the spectrum of the edge profile for its pitch. Only needed for photos; a
-// scan has its dpi.
-func scaleFromGrid(gray *imaging.Gray, gridMM float64) (float64, string, error) {
-	edges := imaging.Canny(gray, 40, 120)
-	ang, err := gridAngle(edges)
-	if err != nil {
-		return 0, "", err
+// crop copies the rectangle [l, t, r, b) out of img.
+func crop(img *imaging.RGB, c []int) *imaging.RGB {
+	l, t, r, b := c[0], c[1], c[2], c[3]
+	w, h := r-l, b-t
+	out := &imaging.RGB{W: w, H: h, Pix: make([]uint8, w*h*3)}
+	for y := range h {
+		src := ((t+y)*img.W + l) * 3
+		copy(out.Pix[y*w*3:(y+1)*w*3], img.Pix[src:src+w*3])
 	}
-	rot := imaging.RotateNearest(edges, ang)
-
-	var pitches []float64
-	for _, p := range []float64{pitchByFFT(imaging.ColSums(rot), 4), pitchByFFT(imaging.RowSums(rot), 4)} {
-		if p > 0 {
-			pitches = append(pitches, p)
-		}
-	}
-	if len(pitches) == 0 {
-		return 0, "", errors.New("grid: could not find a repeating pitch; pass dpi or scale_ref_mm instead")
-	}
-	// Square paper, so the two axes have to agree. If they do not, the scale is a guess
-	// and every dimension would be wrong by that one factor, so refuse rather than return
-	// a plausible-looking number.
-	if len(pitches) == 2 && math.Abs(pitches[0]-pitches[1]) > 0.05*math.Max(pitches[0], pitches[1]) {
-		return 0, "", fmt.Errorf("grid: the two axes disagree (%.1f px vs %.1f px), so the scale would be unreliable; pass dpi or scale_ref_mm instead",
-			pitches[0], pitches[1])
-	}
-	pitch := median(pitches)
-	return gridMM / pitch, fmt.Sprintf("grid: %+.2f deg, %.2f px per %g mm cell", ang, pitch, gridMM), nil
+	return out
 }
-
-// gridAngle is the rotation of the graph paper in degrees, from a Hough transform.
-//
-// A square grid has two line families 90 degrees apart, so the angle is only defined
-// modulo 90. Multiplying by 4 maps that onto a full circle, where the peak can be found
-// without a wraparound seam: folding onto [0, 90) instead would split an axis-aligned grid
-// between 0 and 89 and let a spurious direction win.
-//
-// Only the angle comes from here. The pitch does not, because Canny finds two edges per
-// printed line and the line-to-line spacing then collapses to the width of a single line.
-func gridAngle(edges *imaging.Gray) (float64, error) {
-	// A grid line runs the width of the image, so it earns votes in proportion to the
-	// image size. A low fixed threshold instead returns tens of thousands of lines, and
-	// the diagonals through the lattice intersections drown out the real grid.
-	threshold := int(0.25 * float64(max(edges.W, edges.H)))
-	lines := imaging.HoughLines(edges, 1, math.Pi/720, threshold, 300)
-	if len(lines) < 8 {
-		return 0, fmt.Errorf("grid: only %d strong lines found, need 8; pass dpi or scale_ref_mm instead", len(lines))
-	}
-
-	quad := make([]float64, len(lines))
-	for i, l := range lines {
-		quad[i] = math.Mod(4*l.Theta, 2*math.Pi) // 90 degrees -> a full circle
-	}
-	const bins = 360
-	var hist [bins]int
-	for _, q := range quad {
-		b := min(int(q/(2*math.Pi)*bins), bins-1)
-		hist[b]++
-	}
-	peak := 0
-	for i, c := range hist {
-		if c > hist[peak] {
-			peak = i
-		}
-	}
-	centre := (float64(peak) + 0.5) * 2 * math.Pi / bins
-
-	// circular mean of the lines within 8 degrees of the peak
-	var sre, sim float64
-	n := 0
-	for _, q := range quad {
-		if math.Abs(wrapPi(q-centre)) < 8*math.Pi/180 {
-			sre += math.Cos(q)
-			sim += math.Sin(q)
-			n++
-		}
-	}
-	if n == 0 {
-		for _, q := range quad {
-			sre += math.Cos(q)
-			sim += math.Sin(q)
-		}
-	}
-	return math.Atan2(sim, sre) / 4 * 180 / math.Pi, nil
-}
-
-// wrapPi folds an angle onto (-pi, pi].
-func wrapPi(a float64) float64 { return math.Atan2(math.Sin(a), math.Cos(a)) }
 
 // widthProfile measures the width of the outline in each of bins columns and returns the
 // column positions with the lower and upper edge in each, skipping empty columns.

@@ -26,17 +26,27 @@ of preference:
 1. **A flatbed scan**, part flat face down, 600–1200 dpi. The scan records its
    own resolution, so it carries its scale: no perspective, no parallax,
    nothing to calibrate. This is the whole reason it is the first choice.
-2. **A photo on 1 mm graph paper**, flat and head-on, diffuse light, no shadow
-   across the outline. Then pass `grid_mm: 1`.
+2. **A photo on 1 mm graph paper**, flat and head-on, diffuse light. Graph paper
+   with solid lines or with dots both work. Pass `grid_mm: 1`, and `object: "dark"`
+   for a dark part (it leaves out a shadow beside the part and the paper's dots).
 3. **Any photo plus one caliper reading** of the overall length, passed as
    `scale_ref_mm`.
 
-Tell them to crop to the part. Over 40 MP is refused, and cropping costs no
-accuracy because the scale comes from the dpi.
+A photo's recorded dpi is never a scale: a camera writes 72 or 300 whatever it
+photographed. `list_images` says which photos are cameras (`camera`, `dpi_usable`).
+`measure_part` refuses to scale by a camera's dpi; pass `grid_mm`, `scale_ref_mm` or
+an explicit `dpi` instead.
+
+Tell them to crop to the part, and crop with `crop: [left, top, right, bottom]` in
+the upright photo's pixels rather than cutting the file. Over 40 MP is refused,
+and cropping costs no accuracy because the scale comes from the grid or the dpi.
 
 They upload in the UI's **Images** tab; `list_images` shows what a project has.
-If they paste an image into chat instead, `upload_image` it so it lives with the
-project. `read_image` to look at one — it comes back shrunk, so looking is cheap.
+If they send a link, `upload_image` with `url` fetches it. If they paste an image
+into chat, `upload_image` it with `data`, so it lives with the project. For a big
+photo the person can send it as multipart with `curl -F file=@photo.jpg
+<server>/api/projects/<project>/images` (the field is `file`), which needs no
+base64. `read_image` to look at one — it comes back shrunk, so looking is cheap.
 
 ## 2. Measure, then check the overlay
 
@@ -49,10 +59,27 @@ If the outline is wrong, it is nearly always one of:
 
 - the background got picked instead of the part → `invert: true` (the result
   says so when the shape reaches every edge of the image)
+- a photo's shadow or the paper's dots are in the outline → `object: "dark"` (the
+  default for a photo on a grid; it takes out the dots and keeps the darkest
+  tone), and `crop` to the part
+- the shadow beside the part is still in the outline → `threshold`: the grey level
+  between the part and its shadow (about 50–60 for a black part in a shadow).
+  Check the overlay after each change
 - a shadow is as dark as the part → `channel: "a"`, `"b"` or `"sat"`, which
   separate by colour where brightness cannot
 - the steps are split too finely or too coarsely → `tol_mm`, `min_step_mm`
 - the wrong end is x = 0 → `flip: true`
+
+A photo is not flat, so its grid pitch differs across the frame. `grid_spread_pct` says by how
+much; above about 2% the result carries a perspective note. The scale is taken where the part
+is. For better accuracy anchor with `scale_ref_mm`, or ask for a shot from further away and
+straight down. Quote the numbers as measured.
+
+A part standing above the paper (a photo from above) reads large, because its top
+is nearer the lens than the paper. When the scale came from graph paper or a camera
+and `camera_mm` was not given, the result says so. Ask the person for the height of
+the feature above the paper (a caliper reading) and the lens-to-paper distance, then
+pass `thickness_mm` and `camera_mm`. Until then, the numbers are the paper's scale.
 
 Do not quietly accept a measurement you would not defend. Say what the overlay
 shows, and ask for a better image if that is the real answer.

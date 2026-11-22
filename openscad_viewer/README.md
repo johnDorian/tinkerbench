@@ -23,7 +23,7 @@ Tools:
 | `set_description` | Describe the part |
 | `list_comments`, `add_comment`, `reply_comment`, `resolve_comment`, `apply_suggestion` | Work through the comments you leave on the code or on the model (see below) |
 | `list_parts` | The named pieces of the model (`part()`), their source lines, bounding boxes, and the `feature()` points |
-| `list_images`, `read_image`, `upload_image`, `delete_image` | The scans and photos of the real part you upload. `read_image` comes back shrunk, so a 1200 dpi scan does not flood the agent |
+| `list_images`, `read_image`, `upload_image`, `delete_image` | The scans and photos of the real part you upload, from `data` (base64) or `url`. `list_images` says which photos are cameras, whose dpi is not a scale. `read_image` comes back shrunk, so a 1200 dpi scan does not flood the agent |
 | `measure_part` | Measure a flat part from one of those images: overall size, every step along it, a circle fit for a rounded end, a block of OpenSCAD variables, and an annotated image of what was measured (see below) |
 
 The server's MCP instructions tell the agent the units (mm), Z-up, the bed size, that BOSL2 is installed, that a person is watching, and that anything in Z has to be asked for with a caliper rather than guessed.
@@ -80,9 +80,16 @@ the same thing from `measure_part`.
 
 A flatbed scan is the easy path: lay the part flat face down, scan at 600–1200 dpi, and
 the scan's own resolution is the scale, so there is no perspective and no parallax — the
-two things that make a phone photo hard to trust. If the file records no dpi you can give
-one, give the pitch of the graph paper the part was photographed on, or anchor to a single
-length you have already measured.
+two things that make a phone photo hard to trust.
+
+A phone photo has no scale of its own. Its recorded resolution (72 or 300 dpi) is a default
+the camera writes whatever it photographed, so a photo taken by a camera (its file names a
+Make or Model) never uses that dpi, and `measure_part` refuses to scale by it. Give the
+pitch of the graph paper the part sits on (`grid_mm`, solid lines or dots), one known length
+(`scale_ref_mm`), or an explicit `dpi`. The paper is not flat in a photo, so the grid pitch
+changes by a few per cent across the frame; the scale is taken where the part is. A part
+standing above the paper reads large (its top is nearer the lens): pass `thickness_mm` and
+`camera_mm` to correct it. Without them the result says so.
 
 **Always look at the overlay.** It draws the outline that was actually measured in red,
 the step boundaries in blue, the fitted circle in orange and a 10 mm bar, over the original
@@ -99,10 +106,40 @@ What it will not do:
 - **Oblique photos.** Graph paper plus flat, head-on lighting helps; a scanner removes the
   problem.
 
-If the outline comes out wrong, the dialog's second section has the knobs: `invert` for a
-light part on a dark background, a Lab or saturation channel when a shadow is as dark as
-the part but a different colour, which end is x = 0, and how finely the outline is split
-into steps.
+Images are read upright: the EXIF orientation is applied on upload and on every read, so
+the sizes, the overlay and the crop coordinates match what a photo viewer shows.
+
+If the outline comes out wrong, the dialog's second section has the knobs:
+
+- `object`: how the part is found. `auto` (the default) is `split` for a scan, the original
+  two-class light/dark threshold, and `dark` for a photo on graph paper or from a camera.
+  `dark` removes the dots and lines of the paper first (grey closing, sized in millimetres
+  once the scale is known), then keeps the darkest tone, so a soft shadow lighter than the
+  part is left out. `light` is the mirror image.
+- `threshold`: a grey level to use instead of the automatic one. For a part beside its
+  shadow, the automatic level can land on the shadow; the level between the part and the
+  shadow (about 50–60 for a black part on paper in a shadow) is the usual fix. Check the
+  overlay.
+- `crop`: `[left, top, right, bottom]` in pixels of the upright image. Measure only inside
+  it; the grid is still read from the whole photo. Crop instead of cutting the file.
+- `invert` for a light part on a dark background, a Lab or saturation channel when a shadow
+  is as dark as the part but a different colour, which end is x = 0, and how finely the
+  outline is split into steps.
+
+If the outline reaches every edge of the image, the background was picked. An automatic
+choice is tried the other way round once and the result says so.
+
+### Uploading
+
+`upload_image` takes exactly one of `data` (base64, for a small file) or `url` (an http or
+https address the server can reach, fetched with a 30 s timeout and the 32 MB limit). For
+a big photo, send the file as multipart instead, which needs no base64:
+
+```sh
+curl -F file=@photo.jpg http://localhost:8020/api/projects/<project>/images
+```
+
+The field is named `file`, as in the Images tab's own upload.
 
 ### Accuracy
 
@@ -167,7 +204,9 @@ morphological open/close, contour tracing, Canny and Hough transform, each match
 OpenCV call it replaces. `internal/measure` is the measurement itself. Both were checked
 against the Python tool on the same images: the two agree to the last reported digit,
 including through the Canny → Hough → rotate → spectrum chain that recovers the scale from
-graph paper. The tests regenerate the synthetic parts from scratch, so they stay honest
+graph paper with solid lines. Paper with dots instead has no lines for the Hough transform, so
+the grid is found from the 2D spectrum of blocks of the photo, with the part masked out
+(`internal/measure/dotted.go`). The tests regenerate the synthetic parts from scratch, so they stay honest
 without fixture files.
 
 ## OpenSCAD

@@ -8,7 +8,6 @@ package imaging
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"image"
@@ -58,85 +57,129 @@ func (c *RGB) At(x, y int) (r, g, b uint8) {
 	return c.Pix[i], c.Pix[i+1], c.Pix[i+2]
 }
 
-// Load decodes a PNG or JPEG file into an RGB image and reports its stored resolution in
-// dpi (0 when the file has none: scanners record it, phone cameras usually do not).
-func Load(path string) (*RGB, float64, error) {
+// Load decodes a PNG or JPEG file into an RGB image, turned upright by its EXIF orientation
+// so that it matches what a photo viewer shows. It also returns what the file says about
+// itself (resolution, camera).
+func Load(path string) (*RGB, Meta, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, 0, err
+		return nil, Meta{}, err
 	}
 	defer f.Close()
+	meta, err := ReadMeta(f)
+	if err != nil {
+		return nil, Meta{}, fmt.Errorf("read %s: %w", path, err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, Meta{}, err
+	}
 	img, _, err := image.Decode(f)
 	if err != nil {
-		return nil, 0, fmt.Errorf("decode %s: %w", path, err)
+		return nil, Meta{}, fmt.Errorf("decode %s: %w", path, err)
 	}
-	c, err := fromImage(img)
+	c, err := fromImage(img, meta.Orientation)
 	if err != nil {
-		return nil, 0, err
+		return nil, Meta{}, err
 	}
-	dpi := 0.0
-	if _, err := f.Seek(0, io.SeekStart); err == nil {
-		dpi, _ = DPI(f)
-	}
-	return c, dpi, nil
+	return c, meta, nil
 }
 
-// Decode reads a PNG or JPEG from b.
+// Decode reads a PNG or JPEG from b, upright as Load does.
 func Decode(b []byte) (*RGB, error) {
 	img, _, err := image.Decode(bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
-	return fromImage(img)
+	head := b
+	if len(head) > headerBytes {
+		head = head[:headerBytes]
+	}
+	return fromImage(img, HeadMeta(head).Orientation)
 }
 
-func fromImage(img image.Image) (*RGB, error) {
+// orientedSize is the size of an image after EXIF orientation o (1-8) is applied: the
+// quarter turns (5 to 8) swap the width and the height.
+func orientedSize(w, h, o int) (int, int) {
+	if o >= 5 && o <= 8 {
+		return h, w
+	}
+	return w, h
+}
+
+// orientedIndex maps a source pixel (x, y) of a w x h image to its position in the upright
+// image, for EXIF orientation o. The eight cases are the mirrors and turns of the EXIF
+// specification: 2 mirror, 3 half turn, 4 mirror vertically, 5 transpose, 6 quarter turn
+// clockwise, 7 transverse, 8 quarter turn anticlockwise.
+func orientedIndex(o, w, h, x, y int) (int, int) {
+	switch o {
+	case 2:
+		return w - 1 - x, y
+	case 3:
+		return w - 1 - x, h - 1 - y
+	case 4:
+		return x, h - 1 - y
+	case 5:
+		return y, x
+	case 6:
+		return h - 1 - y, x
+	case 7:
+		return h - 1 - y, w - 1 - x
+	case 8:
+		return y, w - 1 - x
+	}
+	return x, y
+}
+
+func fromImage(img image.Image, orientation int) (*RGB, error) {
 	r := img.Bounds()
-	w, h := r.Dx(), r.Dy()
-	if w <= 0 || h <= 0 {
+	sw, sh := r.Dx(), r.Dy()
+	if sw <= 0 || sh <= 0 {
 		return nil, errors.New("empty image")
 	}
-	if w*h > MaxPixels {
+	if sw*sh > MaxPixels {
 		return nil, fmt.Errorf("image is %dx%d (%.0f megapixels), over the %d MP limit: crop it to the part and try again (cropping does not cost accuracy, the scale comes from the dpi)",
-			w, h, float64(w)*float64(h)/(1<<20), MaxPixels>>20)
+			sw, sh, float64(sw)*float64(sh)/(1<<20), MaxPixels>>20)
 	}
+	w, h := orientedSize(sw, sh, orientation)
 	out := &RGB{W: w, H: h, Pix: make([]uint8, w*h*3)}
+	// put writes source pixel (x, y), 0-based, to its upright place.
+	put := func(x, y int, r, g, b uint8) {
+		dx, dy := orientedIndex(orientation, sw, sh, x, y)
+		i := (dy*w + dx) * 3
+		out.Pix[i], out.Pix[i+1], out.Pix[i+2] = r, g, b
+	}
 	// Fast paths for what the decoders actually produce, with a generic fallback.
 	switch src := img.(type) {
 	case *image.YCbCr: // baseline JPEG
-		for y := range h {
-			for x := range w {
+		for y := range sh {
+			for x := range sw {
 				px, py := r.Min.X+x, r.Min.Y+y
 				ci := src.COffset(px, py)
 				cr, cg, cb := color.YCbCrToRGB(src.Y[src.YOffset(px, py)], src.Cb[ci], src.Cr[ci])
-				i := (y*w + x) * 3
-				out.Pix[i], out.Pix[i+1], out.Pix[i+2] = cr, cg, cb
+				put(x, y, cr, cg, cb)
 			}
 		}
 	case *image.Gray: // greyscale PNG
-		for y := range h {
+		for y := range sh {
 			row := src.Pix[(y+r.Min.Y-src.Rect.Min.Y)*src.Stride:]
-			for x := range w {
+			for x := range sw {
 				v := row[x+r.Min.X-src.Rect.Min.X]
-				i := (y*w + x) * 3
-				out.Pix[i], out.Pix[i+1], out.Pix[i+2] = v, v, v
+				put(x, y, v, v, v)
 			}
 		}
 	case *image.NRGBA:
-		for y := range h {
+		for y := range sh {
 			row := src.Pix[(y+r.Min.Y-src.Rect.Min.Y)*src.Stride:]
-			for x := range w {
+			for x := range sw {
 				j := (x + r.Min.X - src.Rect.Min.X) * 4
-				i := (y*w + x) * 3
-				out.Pix[i], out.Pix[i+1], out.Pix[i+2] = row[j], row[j+1], row[j+2]
+				put(x, y, row[j], row[j+1], row[j+2])
 			}
 		}
 	default:
-		for y := range h {
-			for x := range w {
+		for y := range sh {
+			for x := range sw {
 				cr, cg, cb, _ := img.At(r.Min.X+x, r.Min.Y+y).RGBA()
-				i := (y*w + x) * 3
-				out.Pix[i], out.Pix[i+1], out.Pix[i+2] = uint8(cr>>8), uint8(cg>>8), uint8(cb>>8)
+				put(x, y, uint8(cr>>8), uint8(cg>>8), uint8(cb>>8))
 			}
 		}
 	}
@@ -235,124 +278,4 @@ func clamp8(v float64) uint8 {
 		return 255
 	}
 	return uint8(v + 0.5)
-}
-
-// ---------- stored resolution ----------
-
-// DPI reads the resolution recorded in a PNG (pHYs) or JPEG (JFIF density, else Exif
-// XResolution) and returns 0 when the file does not say.
-func DPI(r io.Reader) (float64, error) {
-	head := make([]byte, 1<<16)
-	n, err := io.ReadFull(r, head)
-	if n == 0 {
-		return 0, err
-	}
-	head = head[:n]
-	switch {
-	case len(head) > 8 && string(head[1:4]) == "PNG":
-		return pngDPI(head), nil
-	case len(head) > 3 && head[0] == 0xff && head[1] == 0xd8:
-		return jpegDPI(head), nil
-	}
-	return 0, nil
-}
-
-func pngDPI(b []byte) float64 {
-	for p := 8; p+8 <= len(b); {
-		n := int(binary.BigEndian.Uint32(b[p:]))
-		typ := string(b[p+4 : p+8])
-		body := p + 8
-		if n < 0 || body+n > len(b) {
-			return 0
-		}
-		if typ == "pHYs" && n >= 9 && b[body+8] == 1 { // unit 1 = pixels per metre
-			return float64(binary.BigEndian.Uint32(b[body:])) * 0.0254
-		}
-		if typ == "IDAT" {
-			return 0 // past the metadata
-		}
-		p = body + n + 4
-	}
-	return 0
-}
-
-func jpegDPI(b []byte) float64 {
-	for p := 2; p+4 <= len(b); {
-		if b[p] != 0xff {
-			return 0
-		}
-		marker := b[p+1]
-		if marker == 0xd8 || marker == 0x01 || (marker >= 0xd0 && marker <= 0xd7) {
-			p += 2
-			continue
-		}
-		n := int(binary.BigEndian.Uint16(b[p+2:]))
-		seg := b[p+4:]
-		if n < 2 || p+2+n > len(b) {
-			return 0
-		}
-		seg = seg[:n-2]
-		switch {
-		case marker == 0xe0 && len(seg) >= 12 && string(seg[:5]) == "JFIF\x00":
-			x := float64(binary.BigEndian.Uint16(seg[8:]))
-			switch seg[7] {
-			case 1: // dots per inch
-				return x
-			case 2: // dots per cm
-				return x * 2.54
-			}
-		case marker == 0xe1 && len(seg) >= 6 && string(seg[:4]) == "Exif":
-			if d := exifDPI(seg[6:]); d > 0 {
-				return d
-			}
-		case marker == 0xda: // start of scan: no metadata past here
-			return 0
-		}
-		p += 2 + n
-	}
-	return 0
-}
-
-// exifDPI reads XResolution/ResolutionUnit out of a TIFF header.
-func exifDPI(t []byte) float64 {
-	if len(t) < 8 {
-		return 0
-	}
-	var ord binary.ByteOrder = binary.BigEndian
-	switch string(t[:2]) {
-	case "II":
-		ord = binary.LittleEndian
-	case "MM":
-	default:
-		return 0
-	}
-	off := int(ord.Uint32(t[4:]))
-	if off+2 > len(t) {
-		return 0
-	}
-	count := int(ord.Uint16(t[off:]))
-	res, unit := 0.0, 2
-	for i := range count {
-		e := off + 2 + i*12
-		if e+12 > len(t) {
-			break
-		}
-		tag := ord.Uint16(t[e:])
-		v := int(ord.Uint32(t[e+8:]))
-		switch tag {
-		case 0x011a: // XResolution, a RATIONAL pointed at by the value field
-			if v+8 <= len(t) {
-				num, den := ord.Uint32(t[v:]), ord.Uint32(t[v+4:])
-				if den != 0 {
-					res = float64(num) / float64(den)
-				}
-			}
-		case 0x0128: // ResolutionUnit: 2 = inch, 3 = cm
-			unit = int(ord.Uint16(t[e+8:]))
-		}
-	}
-	if unit == 3 {
-		res *= 2.54
-	}
-	return res
 }

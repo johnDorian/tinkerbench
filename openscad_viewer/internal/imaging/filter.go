@@ -144,27 +144,38 @@ func morph(g *Gray, se SE, dilate bool) *Gray {
 		}
 		layers = append(layers, layer{dy: r.DY, pix: cache[r.HalfW]})
 	}
+	// Row by row: each output row is the max (or min) of the matching rows of every layer,
+	// which runs over contiguous memory. Rows outside the image contribute nothing.
+	w := g.W
 	out := NewGray(g.W, g.H)
 	for y := range g.H {
-		dst := out.Pix[y*g.W : (y+1)*g.W]
-		for x := range dst {
-			var v uint8 = 255
+		dst := out.Pix[y*w : (y+1)*w]
+		if dilate {
+			clear(dst) // 0 is the identity for a maximum
+		} else {
+			for x := range dst {
+				dst[x] = 255 // and 255 for a minimum
+			}
+		}
+		for _, l := range layers {
+			yy := y + l.dy
+			if yy < 0 || yy >= g.H {
+				continue
+			}
+			src := l.pix[yy*w : (yy+1)*w]
 			if dilate {
-				v = 0
-			}
-			for _, l := range layers {
-				yy := y + l.dy
-				if yy < 0 || yy >= g.H {
-					continue // outside: 0 for dilation, 255 for erosion - neither changes v
+				for x, p := range src {
+					if p > dst[x] {
+						dst[x] = p
+					}
 				}
-				p := l.pix[yy*g.W+x]
-				if dilate {
-					v = max(v, p)
-				} else {
-					v = min(v, p)
+			} else {
+				for x, p := range src {
+					if p < dst[x] {
+						dst[x] = p
+					}
 				}
 			}
-			dst[x] = v
 		}
 	}
 	return out
@@ -178,17 +189,19 @@ func morph(g *Gray, se SE, dilate bool) *Gray {
 // is then the combination of two of those, because it straddles exactly one block boundary.
 // That is a constant three operations per pixel whatever the window size, instead of one
 // per pixel of the window, which is what makes a 7x7 element affordable on a big scan.
+// combine is the maximum (dilate) or the minimum of two grey levels; small enough to inline.
+func combine(a, b uint8, dilate bool) uint8 {
+	if dilate {
+		return max(a, b)
+	}
+	return min(a, b)
+}
+
 func hMorph(g *Gray, h int, dilate bool) []uint8 {
 	out := make([]uint8, g.W*g.H)
 	if h <= 0 {
 		copy(out, g.Pix)
 		return out
-	}
-	op := func(a, b uint8) uint8 {
-		if dilate {
-			return max(a, b)
-		}
-		return min(a, b)
 	}
 	// Padding with the identity element (empty for dilation, set for erosion) gives the
 	// border the same treatment as morph's: outside the image changes nothing.
@@ -214,17 +227,17 @@ func hMorph(g *Gray, h int, dilate bool) []uint8 {
 			s := b * k
 			pre[s] = buf[s]
 			for i := 1; i < k; i++ {
-				pre[s+i] = op(pre[s+i-1], buf[s+i])
+				pre[s+i] = combine(pre[s+i-1], buf[s+i], dilate)
 			}
 			suf[s+k-1] = buf[s+k-1]
 			for i := k - 2; i >= 0; i-- {
-				suf[s+i] = op(suf[s+i+1], buf[s+i])
+				suf[s+i] = combine(suf[s+i+1], buf[s+i], dilate)
 			}
 		}
 		// The window for output x covers row [x-h, x+h], which is buf [x, x+k-1].
 		dst := out[y*n : (y+1)*n]
 		for x := range dst {
-			dst[x] = op(suf[x], pre[x+k-1])
+			dst[x] = combine(suf[x], pre[x+k-1], dilate)
 		}
 	}
 	return out

@@ -8,7 +8,7 @@
   // How the millimetres are established. A scan records its own dpi, which is why it is
   // the default and the easiest path.
   const SCALES = [
-    { id: 'file', label: 'The dpi stored in the file', hint: 'Scanners record it, phone cameras do not.' },
+    { id: 'file', label: 'The dpi stored in the file', hint: 'Scanners record it; a phone photo\'s dpi is a default and is refused.' },
     { id: 'dpi', label: 'Scan dpi', unit: 'dpi', hint: 'For a scanner that does not write it.', value: 1200 },
     { id: 'grid', label: 'Graph paper pitch', unit: 'mm', hint: 'A photo on squared paper; the scale comes from the grid.', value: 1 },
     { id: 'ref', label: 'A length I already know', unit: 'mm', hint: 'The overall length, measured with a caliper.', value: 10 },
@@ -23,6 +23,20 @@
   let minStep = $state(0.5)
   let thickness = $state(0)
   let cameraMM = $state(0)
+
+  // What the part looks like against the paper. auto lets the server decide; the others
+  // change how the outline is found (see the hint under the select).
+  const OBJECTS = [
+    { id: 'auto', label: 'auto', tip: 'The server decides from the image.' },
+    { id: 'dark', label: 'dark part on paper', tip: 'Dark part on paper: removes grid dots and the shadow.' },
+    { id: 'light', label: 'light part', tip: 'Lighter than the background (a bright part on a dark mat).' },
+    { id: 'split', label: 'split (scan)', tip: 'Plain two-class threshold: good for scans.' },
+  ]
+  let objectId = $state('auto')
+  // Blank means automatic. Kept as text so an empty box is distinguishable from 0.
+  let thresholdText = $state('')
+  let cropText = $state(['', '', '', ''])
+  const objectTip = $derived(OBJECTS.find((o) => o.id === objectId)?.tip ?? '')
 
   let busy = $state(false)
   let error = $state('')
@@ -46,9 +60,46 @@
     if (s.value !== undefined) scaleValue = s.value
   }
 
+  // Builds the optional measure options. Each one is only added to the body when it is set,
+  // so the server's defaults apply otherwise. Returns null (and sets error) when the
+  // inputs are unusable.
+  function optionalOptions() {
+    const extra = {}
+    if (objectId !== 'auto') extra.object = objectId
+
+    if (thresholdText.trim() !== '') {
+      const t = Number(thresholdText)
+      if (!Number.isInteger(t) || t < 0 || t > 255) {
+        error = 'Threshold must be a whole number from 0 to 255, or blank for automatic.'
+        return null
+      }
+      extra.threshold = t
+    }
+
+    const filled = cropText.filter((v) => String(v).trim() !== '')
+    if (filled.length > 0) {
+      const c = cropText.map((v) => Number(v))
+      if (filled.length !== 4 || c.some((v) => !Number.isFinite(v) || v < 0 || !Number.isInteger(v))) {
+        error = 'Crop needs all four whole pixel values: left, top, right, bottom.'
+        return null
+      }
+      if (c[2] <= c[0] || c[3] <= c[1]) {
+        error = 'Crop right must be past left, and bottom past top.'
+        return null
+      }
+      extra.crop = c
+    }
+    return extra
+  }
+
   async function run() {
     busy = true
     error = ''
+    const extra = optionalOptions()
+    if (!extra) {
+      busy = false
+      return
+    }
     try {
       result = await api.measure(project, {
         image: image.name,
@@ -63,6 +114,7 @@
         tol_mm: Number(tol),
         min_step_mm: Number(minStep),
         overlay: true,
+        ...extra,
       })
     } catch (e) {
       error = e.message
@@ -91,7 +143,7 @@
   {#if image}
     <header>
       <strong>Measure {image.name}</strong>
-      <span class="muted">{image.width}&times;{image.height} px{image.dpi ? ` · ${Math.round(image.dpi)} dpi in the file` : ' · no dpi in the file'}</span>
+      <span class="muted">{image.width}&times;{image.height} px{image.camera ? ` · ${image.camera}` : ''}{image.dpi ? ` · ${Math.round(image.dpi)} dpi in the file${image.dpi_usable ? '' : ' (not a scale)'}` : ' · no dpi in the file'}</span>
       <span class="spacer"></span>
       <button onclick={close}>Close</button>
     </header>
@@ -139,6 +191,25 @@
               <option value="sat">saturation</option>
             </select>
           </label>
+          <label class="field" title={objectTip}>
+            <span>Object</span>
+            <select bind:value={objectId}>
+              {#each OBJECTS as o}<option value={o.id} title={o.tip}>{o.label}</option>{/each}
+            </select>
+          </label>
+          <p class="hint">{objectTip}</p>
+          <label class="field" title="0 to 255. Blank finds the threshold automatically.">
+            <span>Threshold (0–255)</span>
+            <input type="number" bind:value={thresholdText} placeholder="auto" step="1" min="0" max="255" />
+          </label>
+          <div class="field" title="Crop to a box in image pixels: left, top, right, bottom. Blank uses the whole image.">
+            <span>Crop (px) l, t, r, b</span>
+            <span class="crop">
+              {#each cropText as _, i}
+                <input type="number" bind:value={cropText[i]} placeholder={['l', 't', 'r', 'b'][i]} step="1" min="0" aria-label={['left', 'top', 'right', 'bottom'][i]} />
+              {/each}
+            </span>
+          </div>
           <label class="field"><span>Width tolerance within one step</span><input type="number" bind:value={tol} step="0.01" min="0" /></label>
           <label class="field"><span>Shortest step to report</span><input type="number" bind:value={minStep} step="0.1" min="0" /></label>
           <label class="field"><span>Part thickness (photo parallax)</span><input type="number" bind:value={thickness} step="0.1" min="0" /></label>
@@ -209,6 +280,8 @@
   .hint { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
   .field { display: flex; justify-content: space-between; gap: 8px; align-items: center; padding: 3px 0; }
   .field input { width: 90px; }
+  .field .crop { display: flex; gap: 4px; }
+  .field .crop input { width: 44px; }
   input[type="number"], select { font: inherit; font-size: 13px; padding: 3px 6px; border-radius: 6px; background: var(--card); color: var(--text); border: 1px solid var(--line); }
   details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
   .overall { margin: 0; display: flex; flex-direction: column; }

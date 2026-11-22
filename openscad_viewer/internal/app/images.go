@@ -14,35 +14,50 @@ import (
 	"github.com/johnDorian/tinkerbench/openscad_viewer/internal/project"
 )
 
-// Images lists a project's uploaded images, with their size in pixels and the resolution
-// recorded in the file (0 when it records none).
+// Images lists a project's uploaded images, with their size in pixels (upright, as a photo
+// viewer shows them), the resolution recorded in the file and whether that is a scale.
 func (a *App) Images(name string) ([]project.Image, error) {
 	list, err := a.Store.Images(name)
 	if err != nil {
 		return nil, err
 	}
 	for i := range list {
-		list[i].Width, list[i].Height, list[i].DPI = describe(a.Store.ImagePath(name, list[i].Name))
+		w, h, meta, _ := describe(a.Store.ImagePath(name, list[i].Name))
+		fillInfo(&list[i], w, h, meta)
 	}
 	return list, nil
 }
 
-// describe reads just the header of an image file for its size and resolution, so listing
-// a project does not have to decode every scan in it.
-func describe(path string) (w, h int, dpi float64) {
+// fillInfo copies what was read from a file onto its listing.
+func fillInfo(img *project.Image, w, h int, meta imaging.Meta) {
+	img.Width, img.Height, img.DPI = w, h, meta.DPI
+	img.Camera = meta.CameraName()
+	img.DPIUsable = meta.DPIUsable()
+}
+
+// describe reads just the header of an image file for its size and metadata, so listing a
+// project does not have to decode every scan in it. The size is swapped for a photo turned
+// on its side, to match what Decode gives.
+func describe(path string) (w, h int, meta imaging.Meta, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return 0, 0, 0
+		return 0, 0, imaging.Meta{}, err
 	}
 	defer f.Close()
-	const header = 1 << 18
-	if cfg, _, err := image.DecodeConfig(io.LimitReader(f, header)); err == nil {
-		w, h = cfg.Width, cfg.Height
+	head, err := io.ReadAll(io.LimitReader(f, 1<<18))
+	if err != nil {
+		return 0, 0, imaging.Meta{}, err
 	}
-	if _, err := f.Seek(0, io.SeekStart); err == nil {
-		dpi, _ = imaging.DPI(f)
+	meta = imaging.HeadMeta(head)
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(head))
+	if err != nil {
+		return 0, 0, meta, err
 	}
-	return w, h, dpi
+	w, h = cfg.Width, cfg.Height
+	if meta.Orientation >= 5 && meta.Orientation <= 8 {
+		w, h = h, w
+	}
+	return w, h, meta, nil
 }
 
 // UploadImage stores a scan or photo with a project. The bytes have to decode as a PNG or
@@ -57,8 +72,8 @@ func (a *App) UploadImage(name, file string, data []byte, by string) (project.Im
 	if err != nil {
 		return project.Image{}, err
 	}
-	stored.Width, stored.Height = img.W, img.H
-	stored.DPI, _ = imaging.DPI(bytes.NewReader(data))
+	meta, _ := imaging.ReadMeta(bytes.NewReader(data))
+	fillInfo(&stored, img.W, img.H, meta)
 	a.imageEvent(name, by, "added "+file)
 	return stored, nil
 }
@@ -92,11 +107,11 @@ func (a *App) Measure(name, file string, o measure.Options) (*measure.Result, er
 	if _, err := a.Store.ReadImage(name, file); err != nil {
 		return nil, err
 	}
-	img, dpi, err := imaging.Load(a.Store.ImagePath(name, file))
+	img, meta, err := imaging.Load(a.Store.ImagePath(name, file))
 	if err != nil {
 		return nil, err
 	}
-	res, err := measure.Measure(img, dpi, o)
+	res, err := measure.Measure(img, meta, o)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", file, err)
 	}
