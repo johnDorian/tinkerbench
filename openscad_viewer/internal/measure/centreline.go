@@ -79,6 +79,20 @@ func centreline(mask *imaging.Gray, mmPerPx float64) (*Centreline, bool) {
 	}
 	blob := blobs[0]
 
+	// Thinning costs one pass over the part's box for every pixel of its half-thickness, so a
+	// large compact shape (a disc, or the filled outline of a frame) would take minutes for a
+	// shape that is plainly not a strip. A strip of length L and thickness t has an area of
+	// about L*t and a perimeter of about 2L, so P*P/(4A) estimates L/t from the outline alone.
+	// The gate is set at half the real test, so it only turns away what that would turn away.
+	var perim float64
+	for i, q := range blob.Outline {
+		r := blob.Outline[(i+1)%len(blob.Outline)]
+		perim += math.Hypot(float64(r.X-q.X), float64(r.Y-q.Y))
+	}
+	if perim*perim < 4*float64(blob.Area)*clMinAspect/2 {
+		return nil, false
+	}
+
 	// The part itself is measured for the thickness, so the thinning works on a copy.
 	g := clComponent(mask, blob)
 	skel := slices.Clone(g.pix)
@@ -435,9 +449,15 @@ func clFarthest(pix []uint8, w int, src int) (int, []int32) {
 // clSmooth is a moving average of half-width half (in pixels). Past an end the path is reflected
 // through that end rather than cut short, so the average does not pull the ends inward: a
 // straight path stays exactly where it is.
+//
+// The window is clamped to the path: the reflection reaches at most n-1 points past an end,
+// so on a path shorter than the window (a short, stubby part) a wider one would index outside it.
 func clSmooth(p [][2]float64, half float64) [][2]float64 {
-	h := max(int(math.Round(half)), 1)
 	n := len(p)
+	if n < 2 {
+		return append([][2]float64(nil), p...)
+	}
+	h := min(max(int(math.Round(half)), 1), n-1)
 	at := func(j int) [2]float64 {
 		switch {
 		case j < 0:

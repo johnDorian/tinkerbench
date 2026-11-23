@@ -65,10 +65,10 @@ func (p plan) other() plan { return plan{split: !p.split, light: p.light} }
 // (see plausibleOthers), so that they can be reported rather than silently dropped. ppm is
 // millimetres-per-pixel's inverse when the scale is already known, or 0; it sizes the
 // morphology in millimetres when it is.
-func silhouette(img *imaging.RGB, p plan, ppm float64, o Options) (points, []imaging.Blob, error) {
+func silhouette(img *imaging.RGB, p plan, ppm float64, o Options) (points, []imaging.Blob, int, error) {
 	ch, err := imaging.Extract(img, o.Channel)
 	if err != nil {
-		return points{}, nil, err
+		return points{}, nil, 0, err
 	}
 	var mask *imaging.Gray
 	if p.split {
@@ -79,22 +79,71 @@ func silhouette(img *imaging.RGB, p plan, ppm float64, o Options) (points, []ima
 
 	blobs := imaging.Blobs(mask)
 	if len(blobs) == 0 {
-		return points{}, nil, errors.New("no part found: try invert, another channel, or crop the image closer")
+		return points{}, nil, 0, errors.New("no part found: try invert, another channel, or crop the image closer")
+	}
+	// A printed frame or border around the part (a measuring mat's heavy edge lines) is a
+	// large dark shape too, often larger than the part. It is skipped, as many times as one
+	// encloses the next.
+	frames := 0
+	for len(blobs) > 1 && isFrame(blobs[0], blobs[1:], len(mask.Pix)) {
+		blobs = blobs[1:]
+		frames++
 	}
 	b := blobs[0]
 	if float64(b.Area) < minPartShare*float64(len(mask.Pix)) {
-		return points{}, nil, fmt.Errorf("the largest blob covers only %.3f%% of the image: try invert, another channel, or crop the image closer",
+		return points{}, nil, 0, fmt.Errorf("the largest blob covers only %.3f%% of the image: try invert, another channel, or crop the image closer",
 			100*float64(b.Area)/float64(len(mask.Pix)))
 	}
 	if len(b.Outline) < 12 {
-		return points{}, nil, errors.New("the part outline is too small to measure")
+		return points{}, nil, 0, errors.New("the part outline is too small to measure")
 	}
 	pts := points{X: make([]float64, len(b.Outline)), Y: make([]float64, len(b.Outline))}
 	for i, q := range b.Outline {
 		pts.X[i], pts.Y[i] = float64(q.X), float64(q.Y)
 	}
-	others := plausibleOthers(blobs[1:], b.Area, len(mask.Pix))
-	return pts, others, nil
+	// A frame smaller than the part is not the largest shape, but it is no object either.
+	var rest []imaging.Blob
+	for _, o := range blobs[1:] {
+		if isFrame(o, blobs[:1], len(mask.Pix)) {
+			frames++
+			continue
+		}
+		rest = append(rest, o)
+	}
+	others := plausibleOthers(rest, b.Area, len(mask.Pix))
+	return pts, others, frames, nil
+}
+
+// frameFill is the most of the area inside its outline a shape may cover and still be a frame:
+// a printed border is a few lines around an empty middle, a part is mostly solid. A thin ring
+// such as an O-ring covers a quarter of its disc or more.
+const frameFill = 0.1
+
+// isFrame reports whether b is a frame around the part rather than the part: hollow (its own
+// pixels cover under frameFill of the area its outline encloses) and holding at least one other
+// part-sized shape inside its outline.
+func isFrame(b imaging.Blob, rest []imaging.Blob, pixels int) bool {
+	var enclosed float64
+	n := len(b.Outline)
+	for i, q := range b.Outline {
+		r := b.Outline[(i+1)%n]
+		enclosed += float64(q.X*r.Y - r.X*q.Y)
+	}
+	enclosed = math.Abs(enclosed) / 2
+	if enclosed <= 0 || float64(b.Area) >= frameFill*enclosed {
+		return false
+	}
+	box := blobBox(b)
+	for _, r := range rest {
+		if float64(r.Area) < minPartShare*float64(pixels) || len(r.Outline) < 12 {
+			continue
+		}
+		rb := blobBox(r)
+		if rb[0] > box[0] && rb[1] > box[1] && rb[2] < box[2] && rb[3] < box[3] {
+			return true
+		}
+	}
+	return false
 }
 
 // splitMask is the scan path: a two-class threshold (Otsu unless one is given), then a

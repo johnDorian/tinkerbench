@@ -44,6 +44,8 @@ func (s *Server) Routes() http.Handler {
 
 	mux.HandleFunc("GET /api/config", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.cfg) })
 	mux.HandleFunc("GET /api/events", s.events)
+	mux.HandleFunc("GET /api/mats", s.listMats)
+	mux.HandleFunc("GET /api/mats/{file}", s.getMat)
 	mux.HandleFunc("GET /api/projects", s.listProjects)
 	mux.HandleFunc("POST /api/projects", s.createProject)
 	mux.HandleFunc("GET /api/projects/{p}", s.getProject)

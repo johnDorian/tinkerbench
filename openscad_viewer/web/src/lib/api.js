@@ -42,6 +42,8 @@ export const api = {
     return data
   },
   deleteImage: (name, file) => req('DELETE', `${p(name)}/images/${encodeURIComponent(file)}`),
+  // Printable measuring mats (not per project): [{name, title, paper, inner_mm, url}].
+  mats: () => req('GET', '/api/mats'),
   measure: (name, body) => req('POST', `${p(name)}/measure`, body),
   addComment: (name, c) => req('POST', `${p(name)}/comments`, c),
   reply: (name, id, body) => req('POST', `${p(name)}/comments/${id}/replies`, { body }),

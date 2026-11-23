@@ -5,3 +5,4 @@ node_modules/
 graphify-out/
 .mcp.json
 .claude/skills/
+*.test

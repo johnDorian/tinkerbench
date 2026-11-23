@@ -129,6 +129,13 @@ If the outline comes out wrong, the dialog's second section has the knobs:
 If the outline reaches every edge of the image, the background was picked. An automatic
 choice is tried the other way round once and the result says so.
 
+A photo needs a scale, and the easiest one is a printable measuring mat: `GET /api/mats`
+lists the four variants (A4 or US Letter, a 100 or 150 mm white square), and
+`GET /api/mats/<name>.pdf` (for example `a4-100.pdf`) downloads one. Its white square is
+bordered by a 1 mm grid, so `grid_mm = 1` gives the scale in the photo itself. Print it at
+100% (turn off Fit to page), check the square with a caliper, lay the part flat inside it
+and shoot from straight above. The MCP's `measure_part` description gives the same link.
+
 ### Uploading
 
 `upload_image` takes exactly one of `data` (base64, for a small file) or `url` (an http or

@@ -56,12 +56,14 @@ type rpcResp struct {
 // Server serves MCP over HTTP on top of the app.
 type Server struct {
 	app          *app.App
+	base         string // public address of the server, without a trailing slash
 	instructions string
 }
 
 // New creates the MCP server. uiURL and bed are only used in the instructions for the agent.
 func New(a *app.App, uiURL, bed, openscadVersion string) *Server {
-	return &Server{app: a, instructions: fmt.Sprintf(instructionsTmpl, uiURL, bed, openscadVersion)}
+	base := strings.TrimRight(uiURL, "/")
+	return &Server{app: a, base: base, instructions: fmt.Sprintf(instructionsTmpl, uiURL, bed, openscadVersion)}
 }
 
 func (m *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +141,7 @@ func (m *Server) handle(ctx context.Context, req rpcReq) (any, *rpcErr) {
 	case "ping":
 		return map[string]any{}, nil
 	case "tools/list":
-		return map[string]any{"tools": mcpTools()}, nil
+		return map[string]any{"tools": mcpTools(m.base)}, nil
 	case "tools/call":
 		var p struct {
 			Name      string         `json:"name"`
@@ -193,7 +195,9 @@ func anchorSchema() map[string]any {
 
 func viewNames() []string { return []string{"iso", "front", "back", "left", "right", "top", "bottom"} }
 
-func mcpTools() []map[string]any {
+// mcpTools lists the tools. base is the server's public address, which the measure_part
+// description needs to point at the printable mat.
+func mcpTools(base string) []map[string]any {
 	str := func(d string) map[string]any { return map[string]any{"type": "string", "description": d} }
 	proj := str("Project name (lowercase letters, digits, - and _)")
 	file := str("Source file, default main.scad")
@@ -263,7 +267,7 @@ func mcpTools() []map[string]any {
 			obj(map[string]any{"project": proj, "image": image, "by": source}, "project", "image"), false, true),
 		tool("list_parts", "The named parts of the model (part() calls in the source) with their source line, bounding box and triangle count, the features (feature() points, absolute mm) and whether part renders are still running (pending). The web viewer shows the same. An unlabelled entry means geometry outside every part.",
 			obj(map[string]any{"project": proj}, "project"), true, false),
-		tool("measure_part", measureDesc, obj(map[string]any{"project": proj, "image": image,
+		tool("measure_part", measureDesc+"\n"+matSentence(base), obj(map[string]any{"project": proj, "image": image,
 			"dpi":          num("Resolution in dpi, for a scan whose file records none or whose recorded value you do not trust. The file's own dpi is a scale only when it is a scanner's: a camera's (Make/Model in the file, reported as dpi_usable false) is a default and is never used; pass dpi, grid_mm or scale_ref_mm instead"),
 			"grid_mm":      num("Graph paper pitch in mm, for a photo on squared paper, lines or dots; the scale is recovered from the grid. A phone photo is not flat, so the pitch is taken where the part is"),
 			"scale_ref_mm": num("Known overall length in mm, to anchor the scale when there is nothing else"),
@@ -291,6 +295,13 @@ A long thin part whose axis bends (a spring strip, a hook edge-on) also gets cen
 Segmentation: object auto picks split for a scan and dark for a photo; for a photo with a shadow beside the part, crop to the part, and if the outline still takes the shadow, pass threshold between the part and the shadow.
 It only sees the silhouette, so nothing in Z - thickness, boss height, bore depth, wall thickness - and no raised boss, recess or blind hole. Ask the person to measure those with a caliper instead of guessing them. For a part standing above the paper (a photo from above), pass thickness_mm and camera_mm; without them the features read large.
 Always look at the overlay before using the numbers: a shadow or a caliper jaw merged into the outline is the usual way this goes wrong, and it is obvious in the picture. A glossy part with a bright reflection is outside the dark class too; the notes say when a crop or a threshold is the way round.`
+
+// matSentence points the agent at the printable mat for photos. The mat is what makes a
+// phone photo measurable: its grid gives the scale, so the agent should ask for it rather
+// than guess a scale.
+func matSentence(base string) string {
+	return fmt.Sprintf("For a photo, a printable measuring mat (a white square bordered by a 1 mm grid, as PDF; GET /api/mats on this server lists the sizes) is at %s/api/mats/a4-100.pdf: the person prints it at 100%% (actual size, not fit to page), lays the part on it and measures with grid_mm=1.", base)
+}
 
 type args map[string]any
 

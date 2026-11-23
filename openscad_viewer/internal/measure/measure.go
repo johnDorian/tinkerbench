@@ -335,16 +335,19 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 //
 // The other objects in the photo come back with the outline, for the result to report.
 func segmentAll(img *imaging.RGB, p plan, auto bool, ppm float64, o Options, res *Result) (points, plan, []imaging.Blob, error) {
-	outline, others, err := silhouette(img, p, ppm, o)
+	outline, others, frames, err := silhouette(img, p, ppm, o)
 	if err != nil {
 		return points{}, p, nil, err
+	}
+	if frames > 0 {
+		res.Notes = append(res.Notes, "A frame printed around the part (a hollow outline with the part inside it) was left out; the part inside it was measured.")
 	}
 	if !spansImage(outline, img.W, img.H) {
 		return outline, p, others, nil
 	}
 	if auto {
 		alt := p.other()
-		if second, altOthers, err := silhouette(img, alt, ppm, o); err == nil && !spansImage(second, img.W, img.H) {
+		if second, altOthers, _, err := silhouette(img, alt, ppm, o); err == nil && !spansImage(second, img.W, img.H) {
 			res.Notes = append(res.Notes, fmt.Sprintf("The %s method reached every edge of the image, so the part was found with the %s method instead.", p.name(), alt.name()))
 			return second, alt, altOthers, nil
 		}

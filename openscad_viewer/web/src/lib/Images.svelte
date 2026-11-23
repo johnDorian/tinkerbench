@@ -45,6 +45,21 @@
   }
 
   const kb = (n) => (n > 1 << 20 ? `${(n / (1 << 20)).toFixed(1)} MB` : `${Math.round(n / 1024)} kB`)
+
+  // Measuring mats are the same for every project: fetch them once per page load.
+  // A failure (or an empty list) just hides the section.
+  let matsPromise = null
+  function loadMats() {
+    matsPromise ??= api.mats().catch(() => {
+      matsPromise = null
+      return []
+    })
+    return matsPromise
+  }
+  let mats = $state([])
+  $effect(() => {
+    loadMats().then((list) => (mats = Array.isArray(list) ? list : []))
+  })
 </script>
 
 <div
@@ -61,6 +76,18 @@
     <input bind:this={picker} type="file" accept="image/png,image/jpeg" multiple hidden
            onchange={(e) => { send(e.currentTarget.files); e.currentTarget.value = '' }} />
   </div>
+
+  {#if mats.length}
+    <div class="mats">
+      <span class="mats-label">Print a measuring mat:</span>
+      <span class="mats-links">
+        {#each mats as mat (mat.name)}
+          <a href={mat.url} download title={mat.title}>{mat.paper} · {mat.inner_mm} mm</a>
+        {/each}
+      </span>
+      <p class="mats-hint">Print at 100% (no fit to page), check the white square with a caliper, lay the part in it and shoot from straight above.</p>
+    </div>
+  {/if}
 
   {#if error}<p class="error">{error}</p>{/if}
 
@@ -103,6 +130,12 @@
   .images { overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
   .images.dragging { outline: 2px dashed var(--accent); outline-offset: -4px; background: var(--accent-soft); }
   .top { display: flex; gap: 6px; }
+  .mats { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; color: var(--muted); font-size: 12px; }
+  .mats-label { white-space: nowrap; }
+  .mats-links { display: flex; flex-wrap: wrap; gap: 2px 10px; }
+  .mats-links a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+  .mats-links a:hover { text-decoration: underline; }
+  .mats-hint { flex-basis: 100%; margin: 0; font-size: 11px; color: var(--faint); }
   figure { margin: 0; display: flex; flex-direction: column; gap: 4px; }
   .thumb { padding: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--bg); cursor: pointer; }
   .thumb img { display: block; width: 100%; height: auto; max-height: 160px; object-fit: contain; }

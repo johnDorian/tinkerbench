@@ -142,6 +142,25 @@ func TestInstructionsMentionMeasuring(t *testing.T) {
 	}
 }
 
+func TestMeasureDescribesMat(t *testing.T) {
+	srv, _ := testServer(t)
+	res := call(t, srv, "tools/list", nil)
+	for _, raw := range res["tools"].([]any) {
+		m := raw.(map[string]any)
+		if m["name"] != "measure_part" {
+			continue
+		}
+		desc, _ := m["description"].(string)
+		for _, want := range []string{"http://localhost:8020/api/mats/a4-100.pdf", "100%", "grid_mm=1"} {
+			if !strings.Contains(desc, want) {
+				t.Errorf("measure_part description does not mention %q", want)
+			}
+		}
+		return
+	}
+	t.Fatal("measure_part is not listed")
+}
+
 func TestImageToolsRoundTrip(t *testing.T) {
 	srv, a := testServer(t)
 	data := barPNG(t)

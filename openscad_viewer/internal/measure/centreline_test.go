@@ -229,7 +229,7 @@ func TestCentrelineRealPhoto(t *testing.T) {
 	o.defaults()
 	pl, _ := choosePlan(o, meta.Camera)
 	const pxPerMM = 80.0
-	outline, _, err := silhouette(img, pl, pxPerMM, o)
+	outline, _, _, err := silhouette(img, pl, pxPerMM, o)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,5 +251,25 @@ func TestCentrelineRealPhoto(t *testing.T) {
 	}
 	if c.MedianThicknessMM < 0.8 || c.MedianThicknessMM > 1.5 {
 		t.Errorf("median thickness = %.3f mm, want 0.8 to 1.5", c.MedianThicknessMM)
+	}
+}
+
+// TestCentrelineShortPath is a path shorter than the smoothing window, which a short, stubby
+// part gives at a fine scale: it must smooth without indexing past the ends.
+func TestCentrelineShortPath(t *testing.T) {
+	for _, n := range []int{1, 2, 3, 11} {
+		p := make([][2]float64, n)
+		for i := range p {
+			p[i] = [2]float64{float64(i), 0}
+		}
+		out := clSmooth(p, 28)
+		if len(out) != n {
+			t.Fatalf("n=%d: got %d points", n, len(out))
+		}
+		for i, q := range out {
+			if math.Abs(q[0]-float64(i)) > 1e-9 || q[1] != 0 {
+				t.Errorf("n=%d: point %d moved to %v; a straight path must stay put", n, i, q)
+			}
+		}
 	}
 }

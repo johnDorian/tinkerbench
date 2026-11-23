@@ -26,9 +26,16 @@ of preference:
 1. **A flatbed scan**, part flat face down, 600–1200 dpi. The scan records its
    own resolution, so it carries its scale: no perspective, no parallax,
    nothing to calibrate. This is the whole reason it is the first choice.
-2. **A photo on 1 mm graph paper**, flat and head-on, diffuse light. Graph paper
-   with solid lines or with dots both work. Pass `grid_mm: 1`, and `object: "dark"`
-   for a dark part (it leaves out a shadow beside the part and the paper's dots).
+2. **A photo on the workbench's measuring mat**: a plain white square bordered by a
+   1 mm grid, printed from the server (`GET /api/mats` lists them, e.g.
+   `/api/mats/a4-100.pdf`; also linked in the UI's Images tab). The part lies on
+   plain white, so the outline is clean, and the grid all round gives the scale where
+   the part is. Ask the person to print it at 100% (no fit to page) and check the
+   white square with a caliper. Pass `grid_mm: 1`.
+   Plain 1 mm graph paper (solid lines or dots), flat and head-on, diffuse light,
+   works too. Pass `grid_mm: 1`, and `object: "dark"` for a dark part (it leaves out
+   a shadow beside the part and the paper's dots). Grid lines under the part make the
+   outline harder to find, which is why the mat is better.
 3. **Any photo plus one caliper reading** of the overall length, passed as
    `scale_ref_mm`.
 
