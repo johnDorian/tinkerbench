@@ -28,6 +28,20 @@ Every app serves its web UI, a REST API and an MCP endpoint at `/mcp` on one por
 
 ## Quick start
 
+```console
+$ task demo:up
+$ claude
+> I want to use a supermicro esp board with a DHT11 to create a temperature hudmitdy sensor. Design the circuit for me in fritzing including using aaa batteries. After the circuit is finished and the amount of batteries is determined design a case for it.
+```
+
+Approve the `demo-*` MCP servers when Claude Code asks, and watch http://localhost:8030 (Fritzing) and http://localhost:8020 (OpenSCAD) while it works. The [example](#example) shows what came out of this prompt. `task demo:down` stops the demo again.
+
+## Example
+
+**[ESP32-C3 temperature and humidity sensor on AAA batteries](examples/esp32-temperature-sensor/)**: the prompt above took this from a circuit in Fritzing (an ESP32-C3 SuperMini, a DHT11 and 3 × AAA batteries) to a printed case in OpenSCAD, and a follow-up sliced the case in OrcaSlicer. The folder has the prompt, the `.fzz` and `.scad` files, the wiring notes and screenshots of all three workbenches. It was done in one go and hasn't been built, so expect issues.
+
+## Running the apps
+
 ```sh
 cp .env.example .env    # optional: PRINTER_URL, BED_SIZE
 docker compose up -d --build
