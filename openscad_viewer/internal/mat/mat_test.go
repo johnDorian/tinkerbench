@@ -82,12 +82,17 @@ func TestAll(t *testing.T) {
 	want := []struct {
 		name, paper string
 		inner       float64
+		black       bool
 		title       string
 	}{
-		{"a4-100", "A4", 100, "Measuring mat, 100 mm"},
-		{"a4-150", "A4", 150, "Measuring mat, 150 mm"},
-		{"letter-100", "Letter", 100, "Measuring mat, 100 mm"},
-		{"letter-150", "Letter", 150, "Measuring mat, 150 mm"},
+		{"a4-100", "A4", 100, false, "Measuring mat, 100 mm"},
+		{"a4-100-black", "A4", 100, true, "Measuring mat, 100 mm, black"},
+		{"a4-150", "A4", 150, false, "Measuring mat, 150 mm"},
+		{"a4-150-black", "A4", 150, true, "Measuring mat, 150 mm, black"},
+		{"letter-100", "Letter", 100, false, "Measuring mat, 100 mm"},
+		{"letter-100-black", "Letter", 100, true, "Measuring mat, 100 mm, black"},
+		{"letter-150", "Letter", 150, false, "Measuring mat, 150 mm"},
+		{"letter-150-black", "Letter", 150, true, "Measuring mat, 150 mm, black"},
 	}
 	all := All()
 	if len(all) != len(want) {
@@ -95,7 +100,7 @@ func TestAll(t *testing.T) {
 	}
 	for i, w := range want {
 		got := all[i]
-		if got.Name != w.name || got.Paper != w.paper || got.InnerMM != w.inner || got.Title != w.title {
+		if got.Name != w.name || got.Paper != w.paper || got.InnerMM != w.inner || got.Black != w.black || got.Title != w.title {
 			t.Errorf("All()[%d] = %+v, want %+v", i, got, w)
 		}
 		if m, ok := ByName(w.name); !ok || m != got {
@@ -382,6 +387,35 @@ func TestPDFInfo(t *testing.T) {
 		}
 		if !regexp.MustCompile(`Page size:\s+` + regexp.QuoteMeta(want[m.Paper])).MatchString(info) {
 			t.Errorf("%s: pdfinfo page size is not %s:\n%s", m.Name, want[m.Paper], info)
+		}
+	}
+}
+
+// TestBlackFill: a black mat fills its square with black, inset by the white gap; a white mat
+// fills nothing.
+func TestBlackFill(t *testing.T) {
+	re := regexp.MustCompile(`(?m)^(\S+) (\S+) (\S+) (\S+) re f$`)
+	toMM := func(s string) float64 { return mustFloat(t, s) * 25.4 / 72 }
+	for _, m := range All() {
+		fills := re.FindAllStringSubmatch(string(m.PDF()), -1)
+		if !m.Black {
+			if len(fills) != 0 {
+				t.Errorf("%s: white mat has %d filled rectangles", m.Name, len(fills))
+			}
+			continue
+		}
+		if len(fills) != 1 {
+			t.Fatalf("%s: %d filled rectangles, want 1", m.Name, len(fills))
+		}
+		size := paperSizes[m.Paper]
+		ox, oy, _ := frame(m, size[0])
+		f := fills[0]
+		x, yBottom, w, h := toMM(f[1]), size[1]-toMM(f[2]), toMM(f[3]), toMM(f[4])
+		side := m.InnerMM - 2*BlackGapMM
+		g := bandMM + BlackGapMM
+		if !approx(x, ox+g, 1e-3) || !approx(yBottom, oy+g+side, 1e-3) || !approx(w, side, 1e-3) || !approx(h, side, 1e-3) {
+			t.Errorf("%s: black fill at x %.3f, bottom %.3f, %.3f x %.3f mm; want x %.3f, bottom %.3f, %.3f square",
+				m.Name, x, yBottom, w, h, ox+g, oy+g+side, side)
 		}
 	}
 }

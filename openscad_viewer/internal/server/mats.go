@@ -17,13 +17,14 @@ type matInfo struct {
 	Title   string  `json:"title"`
 	Paper   string  `json:"paper"`
 	InnerMM float64 `json:"inner_mm"`
+	Black   bool    `json:"black"`
 	URL     string  `json:"url"`
 }
 
 func (s *Server) listMats(w http.ResponseWriter, r *http.Request) {
 	list := []matInfo{}
 	for _, m := range mat.All() {
-		list = append(list, matInfo{Name: m.Name, Title: m.Title, Paper: m.Paper, InnerMM: m.InnerMM, URL: "/api/mats/" + m.Name + ".pdf"})
+		list = append(list, matInfo{Name: m.Name, Title: m.Title, Paper: m.Paper, InnerMM: m.InnerMM, Black: m.Black, URL: "/api/mats/" + m.Name + ".pdf"})
 	}
 	writeJSON(w, 200, list)
 }

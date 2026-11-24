@@ -82,10 +82,10 @@
       <span class="mats-label">Print a measuring mat:</span>
       <span class="mats-links">
         {#each mats as mat (mat.name)}
-          <a href={mat.url} download title={mat.title}>{mat.paper} · {mat.inner_mm} mm</a>
+          <a href={mat.url} download title={mat.title}>{mat.paper} · {mat.inner_mm} mm{#if mat.black} · black{/if}</a>
         {/each}
       </span>
-      <p class="mats-hint">Print at 100% (no fit to page), check the white square with a caliper, lay the part in it and shoot from straight above.</p>
+      <p class="mats-hint">Print at 100% (no fit to page), check the square with a caliper, lay the part inside it and shoot from straight above. Only the square is measured; use a black one for a white or light part.</p>
     </div>
   {/if}
 

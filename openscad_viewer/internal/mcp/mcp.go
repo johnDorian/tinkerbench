@@ -300,7 +300,7 @@ Always look at the overlay before using the numbers: a shadow or a caliper jaw m
 // phone photo measurable: its grid gives the scale, so the agent should ask for it rather
 // than guess a scale.
 func matSentence(base string) string {
-	return fmt.Sprintf("For a photo, a printable measuring mat (a white square bordered by a 1 mm grid, as PDF; GET /api/mats on this server lists the sizes) is at %s/api/mats/a4-100.pdf: the person prints it at 100%% (actual size, not fit to page), lays the part on it and measures with grid_mm=1.", base)
+	return fmt.Sprintf("For a photo, a printable measuring mat (a white square bordered by a 1 mm grid, as PDF; GET /api/mats on this server lists the sizes) is at %s/api/mats/a4-100.pdf, and for a white or light part the one with a black square at %s/api/mats/a4-100-black.pdf: the person prints it at 100%% (actual size, not fit to page), lays the part inside the square and measures with grid_mm=1. On a mat only what lies inside the square is measured, and the square's colour sets dark or light; an empty square is an error (the part lies outside it).", base, base)
 }
 
 type args map[string]any

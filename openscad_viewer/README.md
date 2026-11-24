@@ -130,11 +130,19 @@ If the outline reaches every edge of the image, the background was picked. An au
 choice is tried the other way round once and the result says so.
 
 A photo needs a scale, and the easiest one is a printable measuring mat: `GET /api/mats`
-lists the four variants (A4 or US Letter, a 100 or 150 mm white square), and
-`GET /api/mats/<name>.pdf` (for example `a4-100.pdf`) downloads one. Its white square is
-bordered by a 1 mm grid, so `grid_mm = 1` gives the scale in the photo itself. Print it at
-100% (turn off Fit to page), check the square with a caliper, lay the part flat inside it
-and shoot from straight above. The MCP's `measure_part` description gives the same link.
+lists the eight variants (A4 or US Letter, a 100 or 150 mm square, white for a dark part or
+black, `-black`, for a white or light one), and `GET /api/mats/<name>.pdf` (for example
+`a4-100.pdf` or `a4-100-black.pdf`) downloads one. Its square is bordered by a 1 mm grid, so
+`grid_mm = 1` gives the scale in the photo itself. Print it at 100% (turn off Fit to page),
+check the square with a caliper, lay the part flat inside it and shoot from straight above.
+The MCP's `measure_part` description gives the same links.
+
+With `grid_mm` set and no `crop`, `measure_part` looks for the mat's square and measures only
+what lies inside it: the grid band, the text, the table and anything lying beside the mat are
+ignored. The square's colour picks the polarity (a dark part on white, a light part on black),
+so `invert` is not needed on the black mat. An empty square is an error that says the part
+lies outside it; a part that crosses the square's edge is measured as far as the edge, with a
+note. The result's `mat` and `mat_box_px` say which mat was found and where.
 
 ### Uploading
 

@@ -31,7 +31,11 @@ of preference:
    `/api/mats/a4-100.pdf`; also linked in the UI's Images tab). The part lies on
    plain white, so the outline is clean, and the grid all round gives the scale where
    the part is. Ask the person to print it at 100% (no fit to page) and check the
-   white square with a caliper. Pass `grid_mm: 1`.
+   white square with a caliper. Pass `grid_mm: 1`. For a white or light part use the
+   black variant (`/api/mats/a4-100-black.pdf`): the part lies on solid black instead.
+   Only what lies **inside the square** is measured, and its colour picks dark or light
+   by itself; if the result says the square is empty, the part was put outside it, so ask
+   for a new photo with the part in the square.
    Plain 1 mm graph paper (solid lines or dots), flat and head-on, diffuse light,
    works too. Pass `grid_mm: 1`, and `object: "dark"` for a dark part (it leaves out
    a shadow beside the part and the paper's dots). Grid lines under the part make the

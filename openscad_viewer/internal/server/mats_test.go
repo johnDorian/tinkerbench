@@ -33,7 +33,8 @@ func TestListMats(t *testing.T) {
 	want := []struct {
 		name, paper string
 		inner       float64
-	}{{"a4-100", "A4", 100}, {"a4-150", "A4", 150}, {"letter-100", "Letter", 100}, {"letter-150", "Letter", 150}}
+	}{{"a4-100", "A4", 100}, {"a4-100-black", "A4", 100}, {"a4-150", "A4", 150}, {"a4-150-black", "A4", 150},
+		{"letter-100", "Letter", 100}, {"letter-100-black", "Letter", 100}, {"letter-150", "Letter", 150}, {"letter-150-black", "Letter", 150}}
 	if len(list) != len(want) {
 		t.Fatalf("%d mats, want %d: %+v", len(list), len(want), list)
 	}

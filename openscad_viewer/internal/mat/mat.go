@@ -1,6 +1,7 @@
 // Package mat makes the measuring mats: printable sheets a part is laid on before it is
 // photographed for measure_part. A mat is a white square with a 1 mm grid around it, so
-// the photo has a scale in the picture itself.
+// the photo has a scale in the picture itself. The black variant fills the square with solid
+// black (inside a thin white gap), for a white or light part that would not stand out on paper.
 //
 // The PDF is written by hand. It is PDF 1.4 with one page, one content stream of path and
 // text operators, and the standard Helvetica fonts, which every PDF reader has, so nothing
@@ -20,7 +21,8 @@ type Mat struct {
 	Name    string  // file stem and URL key, e.g. "a4-100"
 	Title   string  // printed on the sheet, e.g. "Measuring mat, 100 mm"
 	Paper   string  // "A4" or "Letter"
-	InnerMM float64 // side of the plain white square in mm
+	InnerMM float64 // side of the square inside the grid in mm
+	Black   bool    // the square is filled black, for a light part
 }
 
 // paperSizes are in mm, portrait.
@@ -29,18 +31,21 @@ var paperSizes = map[string][2]float64{
 	"Letter": {215.9, 279.4},
 }
 
-// All lists the variants: A4 and US Letter, each with a 100 mm and a 150 mm square.
+// All lists the variants: A4 and US Letter, each with a 100 mm and a 150 mm square, and each
+// of those white (for a dark part) and black (for a light part).
 func All() []Mat {
 	var out []Mat
 	for _, paper := range []string{"A4", "Letter"} {
 		for _, inner := range []float64{100, 150} {
-			out = append(out, newMat(paper, inner))
+			for _, black := range []bool{false, true} {
+				out = append(out, newMat(paper, inner, black))
+			}
 		}
 	}
 	return out
 }
 
-// ByName finds a variant such as "a4-100" or "letter-150".
+// ByName finds a variant such as "a4-100", "letter-150" or "a4-100-black".
 func ByName(name string) (Mat, bool) {
 	for _, m := range All() {
 		if m.Name == name {
@@ -50,13 +55,19 @@ func ByName(name string) (Mat, bool) {
 	return Mat{}, false
 }
 
-func newMat(paper string, inner float64) Mat {
-	return Mat{
+func newMat(paper string, inner float64, black bool) Mat {
+	m := Mat{
 		Name:    strings.ToLower(paper) + "-" + strconv.Itoa(int(inner)),
 		Title:   fmt.Sprintf("Measuring mat, %g mm", inner),
 		Paper:   paper,
 		InnerMM: inner,
+		Black:   black,
 	}
+	if black {
+		m.Name += "-black"
+		m.Title += ", black"
+	}
+	return m
 }
 
 // Layout in mm. The frame's top edge is at frameTopMM from the top of the page, which
@@ -75,6 +86,11 @@ const (
 	gridLineMM  = 0.12 // every 1 mm
 	majorLineMM = 0.2  // every 5 mm, and the check bar and its ticks
 	edgeLineMM  = 0.4  // the two edges of the band
+
+	// BlackGapMM is the white gap between the inner edge of the band and the black fill of a
+	// black mat. It keeps the grid band a hollow frame of its own, apart from the black square,
+	// which is how measure_part finds the square on either kind of mat.
+	BlackGapMM = 2.0
 )
 
 // PDF returns the mat as a one-page PDF. A Mat with an unknown paper gives nil.
@@ -127,6 +143,10 @@ func (m Mat) content(w, h float64) string {
 	ox := (w - outer) / 2
 	oy := frameTopMM
 	grid(s, ox, oy, m.InnerMM)
+	if m.Black {
+		g := bandMM + BlackGapMM
+		s.rect(ox+g, oy+g, m.InnerMM-2*BlackGapMM, m.InnerMM-2*BlackGapMM)
+	}
 
 	// The orientation mark is a right triangle outside the top-left corner, off the grid,
 	// so the frame's way up is never in doubt in a photo.
@@ -150,8 +170,12 @@ func (m Mat) content(w, h float64) string {
 	y := yb + 24
 	paras := []string{
 		fmt.Sprintf("Print at 100%% / Actual size (turn off Fit to page). Check with a caliper: the white square must be %.1f mm across; if not, tell the agent the real size.", m.InnerMM),
-		"Lay the part flat in the white square. Shoot from straight above, from far enough that the whole frame is in the picture, in even light.",
+		"Lay the part flat in the white square, all of it inside the square: only what is in the square is measured. Shoot from straight above, from far enough that the whole frame is in the picture, in even light.",
 		"Upload the photo to the project and measure with grid_mm = 1.",
+	}
+	if m.Black {
+		paras[0] = fmt.Sprintf("Print at 100%% / Actual size (turn off Fit to page). Check with a caliper: the square inside the grid, edge line to edge line, must be %.1f mm across; if not, tell the agent the real size.", m.InnerMM)
+		paras[1] = "For a white or light part. Lay it flat on the black, all of it inside: only what is in the square is measured. Shoot from straight above, from far enough that the whole frame is in the picture, in even light without flash (a glossy black reflects it)."
 	}
 	for i, p := range paras {
 		if i > 0 {
@@ -237,6 +261,11 @@ func (s *stream) line(x1, y1, x2, y2, widthMM float64) {
 // fill paints a closed triangle with the current fill colour.
 func (s *stream) fill(x1, y1, x2, y2, x3, y3 float64) {
 	fmt.Fprintf(&s.b, "%s m %s l %s l h f\n", s.xy(x1, y1), s.xy(x2, y2), s.xy(x3, y3))
+}
+
+// rect fills a rectangle with the current fill colour; the corner and size are in mm.
+func (s *stream) rect(x, y, w, h float64) {
+	fmt.Fprintf(&s.b, "%s %s %s re f\n", s.xy(x, y+h), num(w*ptPerMM), num(h*ptPerMM))
 }
 
 // text sets a line of text with its baseline at (x, y) in mm.

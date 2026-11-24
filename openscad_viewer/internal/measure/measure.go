@@ -122,6 +122,11 @@ type Result struct {
 	Object       string  `json:"object"`       // how the part was found: split, "split, inverted", dark or light
 	Crop         []int   `json:"crop,omitempty"`
 
+	// Mat is "white" or "black" when the photo was taken on a measuring mat; only its square,
+	// MatBoxPx in full-image pixels, was measured.
+	Mat      string `json:"mat,omitempty"`
+	MatBoxPx []int  `json:"mat_box_px,omitempty"`
+
 	// ObjectsFound counts the part-sized objects in the photo, the measured one included. The
 	// others are not measured; OtherObjects says where they are, and a note says how to measure
 	// one of them.
@@ -187,10 +192,47 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 		ppm = 1 / sc.mmPerPx
 	}
 
+	// org is where work starts in the full image: the crop's corner, or the mat square's.
+	org := [2]int{}
+	if o.Crop != nil {
+		org = [2]int{o.Crop[0], o.Crop[1]}
+	}
+
 	p, auto := choosePlan(o, meta.Camera)
+
+	// On a measuring mat only the square counts: the part is looked for inside it, and its
+	// colour says whether the part is the dark or the light thing in it. An explicit crop wins.
+	var mat *matSquare
+	if o.Crop == nil && o.GridMM > 0 {
+		mat = findMatSquare(img, ppm)
+	}
+	if mat != nil {
+		work = mat.crop(img)
+		org = [2]int{mat.box[0], mat.box[1]}
+		res.MatBoxPx = append([]int(nil), mat.box...)
+		res.Mat = "white"
+		if mat.black {
+			res.Mat = "black"
+		}
+		res.Notes = append(res.Notes, mat.note())
+		if auto && !o.Invert {
+			p = plan{light: mat.black}
+		}
+		if mat.empty(work) {
+			return nil, fmt.Errorf("the measuring mat's %s square (box [%d, %d, %d, %d] of the photo) is empty: the part has to lie inside the square, which is all that is measured. Lay it there and take the photo again, or pass crop=[l,t,r,b] round the part to measure it where it is",
+				res.Mat, mat.box[0], mat.box[1], mat.box[2], mat.box[3])
+		}
+	}
+
 	outline, p, others, err := segmentAll(work, p, auto, ppm, o, res)
 	if err != nil {
+		if mat != nil {
+			return nil, fmt.Errorf("inside the measuring mat's square (box [%d, %d, %d, %d]): %w", mat.box[0], mat.box[1], mat.box[2], mat.box[3], err)
+		}
 		return nil, err
+	}
+	if mat != nil && mat.touchesEdge(outline) {
+		res.Notes = append(res.Notes, "The part reaches the edge of the mat's square: anything of it outside the square was not measured. Move it fully inside the square and take the photo again.")
 	}
 	res.Object = p.name()
 	res.ObjectsFound = 1 + len(others)
@@ -216,9 +258,7 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 			cy += outline.Y[i]
 		}
 		cx, cy = cx/float64(outline.len()), cy/float64(outline.len())
-		if o.Crop != nil {
-			cx, cy = cx+float64(o.Crop[0]), cy+float64(o.Crop[1])
-		}
+		cx, cy = cx+float64(org[0]), cy+float64(org[1])
 		local := sc.at(cx, cy)
 		if math.Abs(local/sc.mmPerPx-1) > 0.005 {
 			res.Notes = append(res.Notes, fmt.Sprintf("The scale is taken where the part is, %.4g mm per pixel there, which is %+.1f%% from the photo's typical grid pitch.", local, 100*(local/sc.mmPerPx-1)))
@@ -252,10 +292,7 @@ func Measure(img *imaging.RGB, meta imaging.Meta, o Options) (*Result, error) {
 
 	// The other objects are reported with their boxes in full-image pixels; the note says
 	// which one was measured, so the person can take a crop round another.
-	ox, oy := 0, 0
-	if o.Crop != nil {
-		ox, oy = o.Crop[0], o.Crop[1]
-	}
+	ox, oy := org[0], org[1]
 	if len(others) > 0 {
 		res.OtherObjects = otherObjects(others, ox, oy, res.ScaleMMPerPx)
 		res.Notes = append(res.Notes, objectsNote(res.ObjectsFound, shiftBox(outlineBox(outline), ox, oy)))
