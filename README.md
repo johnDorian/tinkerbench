@@ -1,6 +1,6 @@
 # tinkerbench
 
-> **A completely vibe-coded project.** Everything here was written by an AI agent, with the aim of making prototyping quick and easy rather than producing polished software. Expect rough edges.
+> **A completely vibe-coded project.** Everything here, code, tests and docs, was written by an AI agent. It is a tool by a hobbyist, for hobbyists: the point is to spend less time fiddling with CAD, wiring diagrams and slicer settings and more time making things. It gets you from idea, or from a broken part on the desk, to a printed or wired prototype faster. It is not polished, reviewed or production software, so expect rough edges and check measurements before you print.
 
 Workbenches for hobby electronics and 3D printing that an AI agent drives over MCP while you watch in the browser. Each one is a small Go server with the real tool (OpenSCAD, Fritzing, OrcaSlicer) in its Docker image and a Svelte UI embedded in the binary.
 
@@ -11,6 +11,20 @@ Workbenches for hobby electronics and 3D printing that an AI agent drives over M
 | [orcaslicer/](orcaslicer/) | Put STL models (uploaded or from the OpenSCAD workbench) on a plate, slice with the OrcaSlicer CLI, and print through Moonraker. | 8050 |
 
 Every app serves its web UI, a REST API and an MCP endpoint at `/mcp` on one port, **without authentication**. Run them on a trusted network only.
+
+## Screenshots
+
+**OpenSCAD workbench**: a replacement spring strip copied from photos of the broken part. The person comments on a face of the model, and the agent's questions about unmeasured dimensions are pinned to the lines of code they concern.
+
+![OpenSCAD workbench](docs/images/openscad.png)
+
+**Fritzing workbench**: the breadboard view of a Wemos D1 mini switching a light through a transistor, with every change the agent made in the history on the right.
+
+![Fritzing workbench](docs/images/fritzing.png)
+
+**OrcaSlicer workbench**: a case and lid for that light, imported from the OpenSCAD workbench and sliced with the Kobra 3 presets, shown in the layer preview and ready to print.
+
+![OrcaSlicer workbench](docs/images/orcaslicer.png)
 
 ## Quick start
 
@@ -30,6 +44,12 @@ claude mcp add --transport http orcaslicer http://localhost:8050/mcp
 [skills/](skills/) has agent skills for using the workbenches well (`task skills:install`).
 
 Data lives in `./data/<app>`. The images are amd64 only.
+
+## Together or on their own
+
+The three workbenches are built to work as one bench for a whole project: wire up the electronics in Fritzing, model the enclosure, mounts or replacement parts around them in OpenSCAD, then slice and print in OrcaSlicer. The agent connects to all three at once, so it can carry the board size, connector positions and mounting holes from the circuit over to the model, and the slicer can import models straight from the OpenSCAD workbench (see below).
+
+Each one also works by itself. Run only the app you need: the OpenSCAD workbench without a slicer, Fritzing for a circuit that never gets a case, or the slicer with STLs from anywhere. None of them needs the others to start, and the links between them are optional settings.
 
 ## Connecting the apps
 
